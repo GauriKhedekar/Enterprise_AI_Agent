@@ -88,6 +88,17 @@ class TestPiiLeakDetection:
         )
         return client
 
+    @staticmethod
+    async def _teardown(client):
+        """Leave no rows behind — a stray tenant pollutes the demo directory."""
+        import os
+
+        try:
+            db = client[os.environ.get("DB_NAME", "app")]
+            await db.employees.delete_many({"company_id": "co-test"})
+        finally:
+            client.close()
+
     async def test_detects_other_employee_email(self, monkeypatch):
         client = await self._seed(monkeypatch)
         try:
@@ -97,7 +108,7 @@ class TestPiiLeakDetection:
             )
             assert any("EMP-0003" in f for f in found), found
         finally:
-            client.close()
+            await self._teardown(client)
 
     async def test_detects_other_employee_full_name(self, monkeypatch):
         client = await self._seed(monkeypatch)
@@ -108,7 +119,7 @@ class TestPiiLeakDetection:
             )
             assert any("EMP-0003" in f for f in found), found
         finally:
-            client.close()
+            await self._teardown(client)
 
     async def test_requesters_own_identity_is_not_a_leak(self, monkeypatch):
         client = await self._seed(monkeypatch)
@@ -119,7 +130,7 @@ class TestPiiLeakDetection:
             )
             assert found == [], found
         finally:
-            client.close()
+            await self._teardown(client)
 
     async def test_employee_code_only_answer_is_clean(self, monkeypatch):
         client = await self._seed(monkeypatch)
@@ -130,11 +141,11 @@ class TestPiiLeakDetection:
             )
             assert found == [], found
         finally:
-            client.close()
+            await self._teardown(client)
 
     async def test_empty_answer_is_clean(self, monkeypatch):
         client = await self._seed(monkeypatch)
         try:
             assert await _detect_pii_leak("", "co-test", "EMP-0001") == []
         finally:
-            client.close()
+            await self._teardown(client)

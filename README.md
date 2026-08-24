@@ -1,195 +1,223 @@
-# farm-ts
+# Adaptive Enterprise Agent
 
-Minimal split backend/frontend starter: **FastAPI + MongoDB** behind a
-**Vite + React 19 + TypeScript** frontend, joined by a small typed fetch layer
-over `/api`. This is a bare skeleton — no app features are implemented. Build on
-top of it.
+A multi-tenant B2B SaaS compliance assistant. Companies onboard their own workspace,
+administrators publish policy documents and provider credentials, and employees ask
+natural-language policy questions ("Am I eligible to work from home two days a week?").
+Each question runs through a **9-stage grounded-decision pipeline** that retrieves policy
+clauses, reads the employee's HR record, decides, and shows its full reasoning trace.
 
-## Layout
+> Every answer is auditable. The employee sees *why* they got a decision; the admin sees
+> every stage, every retrieved clause and every latency for every query in their tenant.
+
+**Live demo:** https://enterprise-agent-3.preview.emergentagent.com
+
+| Role | Email | Password |
+|---|---|---|
+| Company admin | `gauri.khedekar.entc.2023@vpkbiet.org` | `admin123` |
+| Employee (26 months tenure → ALLOW) | `priya.sharma@acmerobotics.com` | `employee123` |
+| Employee (2 months tenure → NOT_ELIGIBLE) | `hannah.weber@acmerobotics.com` | `employee123` |
+| Second tenant (proves isolation) | `admin@northwindlabs.com` | `northwind123` |
+
+---
+
+## Table of contents
+
+- [What it does](#what-it-does)
+- [Screenshots](#screenshots)
+- [Architecture](#architecture)
+- [The decision pipeline](#the-decision-pipeline)
+- [Tech stack](#tech-stack)
+- [Running locally](#running-locally)
+- [Configuration](#configuration)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [Known limits](#known-limits)
+
+---
+
+## What it does
+
+**For company administrators**
+- **Workspace signup** — creates the company and its first admin in one step.
+- **Employee directory** — CRUD with server-computed `service_months`, plus invite-only
+  onboarding (employees cannot self-register).
+- **Policy base** — author Markdown policies and tag each with a retrieval backend.
+- **Provider credentials** — store Gemini / Qdrant / PageIndex keys, encrypted at rest.
+  Only the **last 4 characters** are ever returned, to anyone, including the creator.
+- **Agent run log** — paginated, filterable by decision, every row expandable to the full
+  stage-by-stage trace with raw JSON per stage.
+- **Backend comparison** — run the same queries through Qdrant *and* PageIndex side by
+  side and see where evidence and decisions diverge.
+
+**For employees**
+- **Compliance assistant** — ask a question, watch the pipeline progress stage by stage,
+  then get a colour-coded decision (ALLOW / DENY / NOT_ELIGIBLE / INSUFFICIENT_INFO /
+  BLOCKED) with an expandable "how this was decided" trace.
+- **My requests** — history of every question with its decision and full trace.
+
+**Multi-tenancy** — every query on every collection is scoped by the `company_id` taken
+from the session token, enforced at the API layer on **every** endpoint. Guessing another
+tenant's UUID returns `404`, not their data.
+
+---
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Login](docs/screenshots/01-login.jpg) **Shared login** | ![Dashboard](docs/screenshots/02-admin-dashboard.jpg) **Admin overview** |
+| ![Pipeline](docs/screenshots/07-pipeline-progress.jpg) **Live pipeline progress** | ![Decision](docs/screenshots/08-decision-badge.jpg) **Grounded decision** |
+| ![Trace](docs/screenshots/11-run-trace-expanded.jpg) **Full reasoning trace** | ![Compare](docs/screenshots/13-compare-stats.jpg) **Backend comparison** |
+
+Full annotated set: [`docs/SCREENSHOTS.md`](docs/SCREENSHOTS.md)
+
+---
+
+## Architecture
 
 ```
-farm-ts/
-  backend/   FastAPI + motor (async MongoDB) + Pydantic v2 — python, /root/.venv
-  frontend/  Vite + React 19 + Tailwind v4 + shadcn/ui (TypeScript strict)
-  tests/     Playwright e2e workspace (pre-scaffolded)
+┌─────────────────────────────────────────────────────────────────┐
+│  React 19 + TypeScript (strict) + Tailwind v4 + shadcn/ui       │
+│  TanStack Query · relative /api calls · httpOnly cookie session │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │  /api/*  (Vite proxy → :8001)
+┌───────────────────────────┴─────────────────────────────────────┐
+│  FastAPI — one APIRouter(prefix="/api")                         │
+│  routers/auth.py · routers/company.py · routers/employee.py     │
+│  ── every handler resolves company_id from the JWT cookie ──    │
+├─────────────────────────────────────────────────────────────────┤
+│  lib/pipeline.py   9-stage agent + citation & PII guardrails    │
+│  lib/retrieval.py  qdrant (vectors) │ pageindex (heading tree)  │
+│  lib/gemini.py     REST client, per-tenant key, model fallback  │
+│  lib/security.py   bcrypt · JWT · Fernet field encryption       │
+└──────────┬─────────────────────────┬────────────────────────────┘
+           │                         │
+     ┌─────┴──────┐          ┌───────┴────────┐
+     │  MongoDB   │          │ Gemini · Qdrant│
+     │ (6 colls)  │          │   (external)   │
+     └────────────┘          └────────────────┘
 ```
 
-## Running
+Full design rationale and a file-by-file map: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
-Two separate processes, managed by supervisor in the pod (see "Pod conventions"
-below); to run them by hand from two terminals instead:
+---
+
+## The decision pipeline
+
+`POST /api/employee/runs` returns immediately with `status="running"` and executes the
+pipeline as a background task, persisting each stage as it completes. The UI polls
+`GET /api/employee/runs/{id}` and renders genuine progress.
+
+> **Why async?** The full pipeline takes 7–50s. The platform ingress hard-caps a single
+> request at 60s — the synchronous version returned **502**. This was found in testing,
+> not guessed.
+
+| # | Stage | Kind | Purpose |
+|---|---|---|---|
+| 0 | `credentials` | code | Load + decrypt the tenant's Gemini key |
+| 1 | `input_guardrail` | LLM | Screen for prompt injection, unsafe instructions, off-topic → halt |
+| 2 | `requirement_classifier` | LLM | 3 independent booleans: policy / enterprise-data / action needed |
+| 3 | `policy_retrieval` | LLM+DB | Retrieve clauses via the policy's tagged backend (skippable) |
+| 4 | `enterprise_data_lookup` | code | Tenant-scoped HR record; minimised projection for third parties (skippable) |
+| 5 | `evidence_combiner` | LLM | Merge policy + HR evidence into a neutral summary |
+| 6 | `decision` | LLM | Structured JSON decision + reasoning + citations |
+| 7 | `tool_gate` | **code** | Execute an action *only* if ALLOW ∧ action_required ∧ code verified |
+| 8 | `output_validation` | LLM+**code** | Grounding audit + deterministic PII leak scan |
+
+**Three guardrails that never trust the model:**
+1. **Citation validation** — every claimed citation must reach ≥0.62 token recall against
+   actually-retrieved text, or it is stripped and logged as `stripped_citations`.
+2. **Tool gate** — plain code. A model-invented `employee_code` sets
+   `hallucinated_code_flagged` and the action is refused.
+3. **PII scan** — the final answer is scanned against the tenant directory; another
+   employee's name or email replaces the answer with a refusal.
+
+---
+
+## Tech stack
+
+| Layer | Choice | Why |
+|---|---|---|
+| Backend | FastAPI, async throughout | Pydantic v2 validates every body; native async for 6 sequential LLM calls |
+| DB | MongoDB (motor) | Schemaless run traces vary in shape per stage |
+| LLM | Gemini via REST (`gemini-3-flash-preview` + fallbacks) | Native `responseSchema` structured JSON, no parsing hacks |
+| Vectors | Qdrant Cloud | Managed HNSW; per-tenant collections |
+| Embeddings | `gemini-embedding-001` (3072-dim) | One provider for chat + embeddings |
+| Frontend | React 19, TS strict, Tailwind v4, shadcn/ui | Typed API boundary; dense Linear-style dashboard |
+| Data fetching | TanStack Query | Polling with `refetchInterval`, cache invalidation |
+| Auth | bcrypt + JWT in httpOnly cookie | No token in JS → no XSS token theft |
+| Secrets | Fernet (key from env) | Provider keys encrypted at rest, never returned |
+
+---
+
+## Running locally
 
 ```bash
-cd backend && uvicorn server:app --host 0.0.0.0 --port 8001 --reload   # http://localhost:8001
-cd frontend && yarn dev                                                # http://localhost:3000
+# Backend (Python 3.11)
+cd backend
+pip install -r requirements.txt
+uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+
+# Frontend (Node 24)
+cd frontend
+yarn install
+yarn dev                 # http://localhost:3000, proxies /api → :8001
+
+# Seed the demo tenants (idempotent)
+cd backend && python seed.py
 ```
 
-## The `/api` proxy convention
+MongoDB must be reachable at `MONGO_URL`. In the hosted pod all three run under
+supervisor: `sudo supervisorctl restart backend frontend`.
 
-Every backend route lives under `/api` (the backend mounts one
-`APIRouter(prefix="/api")`), and the frontend dev server
-(`frontend/vite.config.ts`) proxies `/api/*` to `http://localhost:8001`. So
-frontend code always calls a **relative** path — `apiGet("/status")` →
-`/api/status` — and never an absolute backend URL. The same code works in dev
-(via the Vite proxy) and in production (once both are served behind a single
-origin).
+## Configuration
 
-## Backend
+`backend/.env`:
 
-FastAPI, async throughout. `python` is the app venv interpreter
-(`/root/.venv/bin/python`); backend deps are pip-installed from
-`backend/requirements.txt`.
-
-- **Entry point**: `backend/server.py` — creates `app = FastAPI()`, creates
-  `api_router = APIRouter(prefix="/api")`, registers routes **on the router**,
-  and calls `app.include_router(api_router)` at the bottom. CORS middleware is
-  added from `CORS_ORIGINS`. Never hang a route directly off `app` — it would
-  land outside `/api` and the Vite proxy would not reach it.
-- **The route pattern** (copy `status` in `server.py`):
-  1. a Pydantic model per request body and per response
-     (`StatusCheckCreate` / `StatusCheck`);
-  2. an `async def` handler decorated with
-     `@api_router.post("/status", response_model=StatusCheck)`;
-  3. `await` the motor call inside it.
-  FastAPI validates the request against the Pydantic model before your handler
-  runs — a malformed body never reaches your code, it gets an automatic `422`
-  with a `{"detail": [...]}` body.
-- **Growing the backend**: as `server.py` gets crowded, move models to
-  `backend/models/` and routers to `backend/routers/` (one module per resource,
-  each exporting its own `APIRouter`, mounted from `server.py` via
-  `api_router.include_router(...)` or `app.include_router(...)` with the `/api`
-  prefix preserved).
-- **MongoDB**: import the shared handle — `from lib.db import client, db`
-  (`backend/lib/db.py` self-loads `.env` before reading env). Use it from
-  `server.py`, every router, and standalone scripts like `seed.py`; never
-  construct another `AsyncIOMotorClient`. Collections are attributes:
-  `await db.status_checks.insert_one(...)`, `await db.status_checks.find().to_list(1000)`.
-  Motor connects lazily, so importing `server` never blocks on Mongo. `pymongo`
-  is installed too if you need a sync client in a script.
-- **Ids**: documents use a string `id` (`uuid4`) field, not Mongo's `ObjectId`
-  — `ObjectId` is not JSON-serializable and leaks into response bodies. Keep the
-  `uuid4` default-factory pattern from `StatusCheck`.
-- **Config**: `backend/.env` — `MONGO_URL` (connection string), `DB_NAME`
-  (database name), `CORS_ORIGINS`. `server.py` loads it with `python-dotenv`
-  above its local imports, and `lib/db.py` self-loads it so standalone scripts
-  inherit it too. The pod runs `mongod` locally, so `MONGO_URL` points at
-  `localhost`. Add new secrets/config here; read them with `os.environ`.
-- **Dates**: `backend/lib/dates.py` — `today_iso(tz=None)`. The pod clock is
-  UTC; anchor "today" server-side with this, never with client-side date math.
-- **Interactive check**: `cd /app/backend && python -c 'import server'` catches
-  syntax/import errors without waiting for the supervisor log.
-
-## Frontend
-
-- Vite + React 19 + TypeScript strict, dev server on port `3000`.
-- Tailwind CSS v4 (via the `@tailwindcss/vite` plugin — no separate
-  `tailwind.config.js` needed) + shadcn/ui, initialized with the `base-nova`
-  style and `neutral` base color, `@` path alias (`@/*` → `src/*`) wired in both
-  `tsconfig.app.json`/`tsconfig.json` and `vite.config.ts`.
-- `react-router-dom` and `motion` are preinstalled — don't re-add them. `src/App.tsx`
-  is the `<Routes>` table and nothing else; screens live in `src/pages/*.tsx` and are
-  imported as `@/pages/<Name>`. `src/pages/Home.tsx` ships as the worked example. Add
-  a `<Route>` for every page you write, in the same edit that creates the page — a
-  page with no route is unreachable, and any URL without a matching `<Route>` renders a
-  **blank page** — `<Routes>` matches nothing and mounts nothing.
-- Components installed under `src/components/ui/`: button, card, input, label,
-  select, dialog, sheet, tabs, badge, calendar, sonner, textarea, table, popover,
-  dropdown-menu, checkbox. Add more with `npx shadcn@latest add <component>`.
-- `src/lib/api.ts` — the typed fetch layer: `apiGet<T>`, `apiPost<T>`,
-  `apiPut<T>`, `apiPatch<T>`, `apiDelete<T>`, all relative to base `/api`,
-  throwing `ApiError` (with `status` and the parsed body) on any non-2xx.
-  **Nothing infers across the Python boundary** — you declare the response type
-  yourself as a TS interface mirroring the endpoint's Pydantic model, and keeping
-  the two in sync is a manual discipline. When you change a Pydantic model,
-  change its TS interface in the same edit.
-- `src/pages/Home.tsx` is a minimal example of the wiring: TanStack Query's `useQuery`
-  with `apiGet<StatusCheck[]>("/status")` as the `queryFn`. It is a **non-blocking
-  connectivity probe**, not a proof of the round trip — the result is deliberately
-  discarded so the splash renders identically with no backend. `apiGet<T>` does no
-  runtime validation either; `T` is your assertion, not a check. See the
-  static-preview rule in `TEMPLATE.md` §4 for why no page may be gated on a fetch.
-
-## TypeScript
-
-`frontend/tsconfig.app.json` / `tsconfig.node.json` have `strict: true`. In the
-pod:
-
-```bash
-cd frontend && yarn typecheck
+```ini
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=app
+CORS_ORIGINS=*
+JWT_SECRET=<random secret>          # session signing
+APP_MASTER_KEY=<random secret>      # derives the Fernet key for provider secrets
+GEMINI_MODELS=gemini-3-flash-preview,gemini-3.5-flash,gemini-flash-lite-latest,gemini-3.6-flash
+GEMINI_EMBED_MODEL=gemini-embedding-001
+RESEND_API_KEY=                     # optional; empty → invite links shown in the UI
+SENDER_EMAIL=onboarding@resend.dev
 ```
 
-— plain `tsc --noEmit` run from `frontend/` checks ZERO files (root tsconfig uses
-project references with `"files": []`) and exits 0 even with type errors. Always
-use `-b` for the frontend. Lint with `cd frontend && yarn lint` (oxlint).
+Provider keys (Gemini / Qdrant / PageIndex) are **not** env vars — they are per-tenant,
+added at `/company/api-keys` and stored encrypted.
 
-## Data fetching
-
-TanStack Query is wired: `QueryClientProvider` in `src/main.tsx`, `useQuery` demo
-in `src/pages/Home.tsx` (see above). Use `useQuery`/`useMutation`, not
-fetch-in-`useEffect`.
-
-## Completion gate (tier 1)
-
-When the build is complete, run tier 1 once, all in the same turn: a curl smoke
-over the key `/api` endpoints (assert status AND a response field, plus one
-negative case), `cd frontend && yarn typecheck`, and ONE happy-path browser pass
-through the core user journey. Clean on all three → finish; any failure is a real
-bug — fix it, re-run the failed check, and escalate to the testing subagent.
-No routine typecheck/lint/smoke passes during the build — tier 1 runs exactly once.
-
+> `APP_MASTER_KEY` is the encryption root. Rotating it makes existing stored provider
+> keys undecryptable — they must be re-entered.
 
 ## Testing
 
-Two lanes.
-
-**Backend (pytest)** — specs in `backend/tests/` as `test_*.py`, run with:
-
 ```bash
-cd /app/backend && pytest
+cd backend && python -m pytest              # guardrail unit tests (pytest-xdist)
+cd frontend && yarn typecheck               # TS strict, catches Pydantic↔TS drift
+bash scripts/adversarial.sh <email> <pw> "<query>"   # adversarial guardrail probes
 ```
 
-`backend/pytest.ini` is canonical: `addopts = -n 2 --dist loadscope` (pytest-xdist,
-already parallel — do not pass your own `-n`) and `asyncio_mode = auto` (so
-`async def test_...` needs no marker). Serial is `-n 0`, **never**
-`-p no:xdist` (that errors, because `addopts` still passes `-n`/`--dist`).
-`backend/tests/conftest.py` is pre-scaffolded — a sync `client` fixture
-(`httpx.Client` rooted at `/api`), an async `aclient`, and an `api_url()` helper,
-all pointed at `BACKEND_URL` (default `http://localhost:8001`). Tests hit the
-live uvicorn process, so the app under test is the one the browser sees. Add
-app-specific fixtures below the marker; do not re-create the file.
+Results, adversarial traces and benchmark numbers: [`docs/TESTING.md`](docs/TESTING.md)
 
-**Frontend (Playwright)** — `/app/tests/` is pre-scaffolded:
-`playwright.config.ts` (canonical — edit the marked lines only),
-`fixtures/helpers.ts`, and a `package.json` that resolves
-`@playwright/test@1.62.0` (node_modules baked into the image). Write specs into
-`tests/e2e/`. Do NOT re-create the config/helpers or install/upgrade playwright —
-matching Chromium browsers live at `/pw-browsers`.
+## Documentation
 
-The backend lane is pytest: this template's backend is Python, so `vitest` does
-not apply to it.
+| Doc | Contents |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design decisions, data model, request flow, file-by-file map |
+| [`docs/TESTING.md`](docs/TESTING.md) | Unit/browser results, all adversarial guardrail traces |
+| [`docs/RETRIEVAL_BENCHMARK.md`](docs/RETRIEVAL_BENCHMARK.md) | Qdrant vs PageIndex: speed, accuracy, divergence analysis |
+| [`docs/INTERVIEW_QA.md`](docs/INTERVIEW_QA.md) | ~40 likely interview questions with answers |
+| [`docs/SCREENSHOTS.md`](docs/SCREENSHOTS.md) | Annotated screenshot walkthrough |
 
-## Pod conventions
+## Known limits
 
-This template runs under supervisord in the Emergent agent pod — supersedes any
-local-run instructions above.
-
-- Backend, frontend, and `mongod` are each a supervisor program. After code or
-  config changes, restart and wait for readiness:
-
-  ```bash
-  sudo supervisorctl restart frontend backend
-  until curl -sf -o /dev/null http://localhost:3000; do sleep 2; done
-  ```
-
-- Status, only after a restart you triggered:
-  `sudo supervisorctl status frontend backend`. Logs:
-  `/var/log/supervisor/backend.err.log`, `backend.out.log`,
-  `frontend.err.log`.
-- App in a browser: the pod's preview URL (frontend, port `3000`). Backend API
-  directly at port `8001`.
-- `mongod` runs locally in the pod (`--bind_ip_all`); `MONGO_URL` in
-  `backend/.env` points at `localhost`, no separate Mongo container.
-- Both dev servers hot-reload on file edits (uvicorn `--reload` for the backend,
-  Vite HMR for the frontend); no rebuild step needed for normal iteration. A
-  restart is still needed after changing `.env`, `requirements.txt`, or
-  `vite.config.ts`.
+- **Gemini free tier is 20 requests per model per day.** A query costs ~6, so the model
+  fallback chain yields ~13 queries/day. Enable billing to remove the cap.
+- **PageIndex cloud API is not called.** Its SDK ingests PDFs while policies here are
+  Markdown, so that backend runs local heading-tree reasoning instead. Swapping in the
+  HTTP client is isolated to `pageindex_retrieve()`.
+- Email invites need a Resend key; without one the invite link is shown in the admin UI.
+- Run traces are unbounded — a retention policy would be needed at scale.
