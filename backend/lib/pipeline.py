@@ -292,6 +292,35 @@ async def compare_backends(
     }
 
 
+async def _detect_pii_leak(
+    text: str, company_id: str, requester_code: Optional[str]
+) -> list[str]:
+    """Plain-code check: does the answer contain another employee's name or email?
+
+    Runs regardless of what the LLM validator claims, so a compromised or over-eager
+    model cannot talk its way past the privacy boundary.
+    """
+    if not text:
+        return []
+    haystack = text.lower()
+    findings: list[str] = []
+    others = await db.employees.find(
+        {"company_id": company_id, "employee_code": {"$ne": requester_code}},
+        {"_id": 0, "name": 1, "email": 1, "employee_code": 1},
+    ).to_list(1000)
+
+    for emp in others:
+        email = (emp.get("email") or "").lower()
+        if email and email in haystack:
+            findings.append(f"email of {emp['employee_code']}")
+            continue
+        name = (emp.get("name") or "").strip()
+        # a full name is identifying; a single given name shared across staff is not
+        if name and len(name.split()) >= 2 and name.lower() in haystack:
+            findings.append(f"name of {emp['employee_code']}")
+    return findings[:5]
+
+
 async def run_pipeline(
     *,
     query: str,
@@ -621,6 +650,7 @@ async def run_pipeline(
 
     # ---- 8. output validation ----
     stage = Stage("output_validation")
+    leak_findings: list[str] = []
     try:
         validated = await gemini.generate_json(
             api_key,
@@ -633,7 +663,34 @@ async def run_pipeline(
             VALIDATE_SCHEMA,
         )
         final_answer = str(validated.get("final_answer") or answer)
-        await record(stage.done(
+
+        # Deterministic PII check — never trust the model's own rewrite. Any other
+        # employee's name or email appearing in the answer is a hard block.
+        leak_findings = await _detect_pii_leak(final_answer, company_id, requester_code)
+        model_flagged_leak = bool(validated.get("leaks_other_employee_data"))
+
+        if leak_findings or model_flagged_leak:
+            final_answer = (
+                "I can't share another employee's personal information. I can only answer "
+                "questions about your own record and your company's published policies."
+            )
+            result["cited_evidence"] = []
+            await record(stage.done(
+                "blocked",
+                (
+                    f"Blocked: answer disclosed other employees' data ({', '.join(leak_findings)})."
+                    if leak_findings
+                    else "Blocked: output validator flagged disclosure of another employee's data."
+                ),
+                {
+                    **validated,
+                    "code_detected_leaks": leak_findings,
+                    "model_flagged_leak": model_flagged_leak,
+                    "answer_replaced": True,
+                },
+            ))
+        else:
+            await record(stage.done(
                 "ok" if validated.get("grounded") else "blocked",
                 (
                     "Answer is grounded in cited evidence."
