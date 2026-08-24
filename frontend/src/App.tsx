@@ -8,6 +8,7 @@ import CompanyDashboard from "@/pages/CompanyDashboard";
 import CompanyApiKeys from "@/pages/CompanyApiKeys";
 import CompanyEmployees from "@/pages/CompanyEmployees";
 import CompanyPolicies from "@/pages/CompanyPolicies";
+import CompanyCompare from "@/pages/CompanyCompare";
 import CompanyRuns from "@/pages/CompanyRuns";
 import EmployeeHome from "@/pages/EmployeeHome";
 import EmployeeHistory from "@/pages/EmployeeHistory";
@@ -36,6 +37,10 @@ export default function App() {
         <Route
           path="/company/runs"
           element={<RequireRole role="company_admin">{(me) => <CompanyRuns me={me} />}</RequireRole>}
+        />
+        <Route
+          path="/company/compare"
+          element={<RequireRole role="company_admin">{(me) => <CompanyCompare me={me} />}</RequireRole>}
         />
         <Route
           path="/company/api-keys"

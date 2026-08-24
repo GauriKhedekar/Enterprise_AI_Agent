@@ -186,6 +186,112 @@ def _employee_facts(emp: dict[str, Any], months: int) -> dict[str, Any]:
     }
 
 
+async def compare_backends(
+    *, query: str, company_id: str, employee_code: Optional[str]
+) -> dict[str, Any]:
+    """Run one query through both retrieval backends over the SAME policy set.
+
+    Comparison mode intentionally runs only retrieval -> decision (not all 9 stages):
+    divergence between backends originates in retrieval, and the guardrail/classifier/
+    combiner/validation stages are backend-independent. This also keeps the call count at
+    ~2 Gemini requests per backend, which matters on a quota-limited key.
+    """
+    api_key = await _company_gemini_key(company_id)
+    policies = await db.policies.find({"company_id": company_id}, {"_id": 0}).to_list(200)
+    chunks = retrieval.chunk_policies(policies)
+
+    facts: list[dict[str, Any]] = []
+    retrieved_codes: set[str] = set()
+    if employee_code:
+        from routers.company import _as_date, service_months
+
+        emp = await db.employees.find_one(
+            {"company_id": company_id, "employee_code": employee_code}, {"_id": 0}
+        )
+        if emp:
+            months = service_months(_as_date(emp["joining_date"]))
+            record = _employee_facts(emp, months)
+            retrieved_codes.add(record["employee_code"])
+            facts.append(
+                {
+                    "source": f"HR record {record['employee_code']}",
+                    "text": "; ".join(f"{k}: {v}" for k, v in record.items()),
+                    "score": None,
+                    "backend": "employees",
+                }
+            )
+
+    async def one(backend: str) -> dict[str, Any]:
+        t0 = time.perf_counter()
+        out: dict[str, Any] = {
+            "backend": backend,
+            "decision": None,
+            "reasoning": "",
+            "evidence": [],
+            "cited_evidence": [],
+            "latency_ms": 0,
+            "error": None,
+        }
+        if not api_key:
+            out["error"] = "No Gemini credential configured for this company."
+            return out
+        try:
+            if backend == "qdrant":
+                creds = await _company_provider(company_id, "qdrant")
+                if not creds or not creds.get("endpoint"):
+                    raise retrieval.RetrievalError("Qdrant is not configured (URL + key required).")
+                hits = await retrieval.qdrant_retrieve(
+                    query=query, chunks=chunks, endpoint=creds["endpoint"],
+                    qdrant_key=creds["value"], gemini_key=api_key, company_id=company_id,
+                )
+            else:
+                hits = await retrieval.pageindex_retrieve(
+                    query=query, chunks=chunks, gemini_key=api_key
+                )
+            out["evidence"] = hits
+
+            pool = hits + facts
+            block = "\n\n".join(
+                f"[{i + 1}] ({e['source']})\n{e['text']}" for i, e in enumerate(pool)
+            )
+            decided = await gemini.generate_json(
+                api_key,
+                "You are an enterprise compliance decision engine. Decide using ONLY the "
+                "supplied evidence. ALLOW when the policy permits it and every condition is "
+                "met. NOT_ELIGIBLE when permitted in general but this employee fails a "
+                "condition. DENY when forbidden. INSUFFICIENT_INFO when the evidence cannot "
+                "settle it. cited_evidence strings must be copied verbatim from the evidence.",
+                f"Query:\n{query}\n\nRequester employee_code: {employee_code or 'unknown'}\n\n"
+                f"Evidence passages:\n{block or 'NONE'}",
+                DECISION_SCHEMA,
+            )
+            decision = decided.get("decision")
+            out["decision"] = decision if decision in DECISIONS else "INSUFFICIENT_INFO"
+            out["reasoning"] = str(decided.get("reasoning", ""))
+            kept, _ = validate_citations(decided.get("cited_evidence", []), pool)
+            out["cited_evidence"] = kept
+        except (retrieval.RetrievalError, gemini.GeminiError) as exc:
+            out["error"] = str(exc)[:300]
+        out["latency_ms"] = int((time.perf_counter() - t0) * 1000)
+        return out
+
+    qd, pi = await one("qdrant"), await one("pageindex")
+
+    qd_sources = {e["source"] for e in qd["evidence"]}
+    pi_sources = {e["source"] for e in pi["evidence"]}
+    union = qd_sources | pi_sources
+    overlap = round(len(qd_sources & pi_sources) / len(union), 3) if union else 0.0
+
+    return {
+        "query": query,
+        "employee_code": employee_code,
+        "qdrant": qd,
+        "pageindex": pi,
+        "decisions_agree": qd["decision"] == pi["decision"] and qd["decision"] is not None,
+        "evidence_overlap": overlap,
+    }
+
+
 async def run_pipeline(
     *,
     query: str,

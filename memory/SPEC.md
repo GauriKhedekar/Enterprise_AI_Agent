@@ -88,6 +88,21 @@ a skipped branch contributes no evidence.
   quota is **20 requests per model per day**, so `GEMINI_MODELS` is an ordered fallback
   chain and a per-day 429 marks that model exhausted for the process.
 
+## Backend comparison (`/company/compare`)
+`POST /api/company/compare {queries:[≤5]}` runs each query through **both** retrieval
+backends over the **same** policy set (each policy's `retrieval_backend` tag is ignored
+here — that is the point of the page), then reports per-backend decision, retrieved
+section paths, latency, plus `decisions_agree` and Jaccard `evidence_overlap` of the
+retrieved section paths. `GET /api/company/compare/suggestions` lists distinct past
+queries; a query matching a past run reuses that asker's `employee_code` so HR-dependent
+decisions are reproducible.
+
+Comparison mode deliberately runs only **retrieval → decision** (~2 Gemini calls per
+backend), not all 9 stages: divergence originates in retrieval and the guardrail/
+classifier/combiner/validation stages are backend-independent. This matters on a
+quota-limited key. Stats: `agreement_rate`, `avg_latency_{qdrant,pageindex}_ms`,
+`avg_evidence_overlap`.
+
 ## Deviations / not built
 - **PageIndex cloud API is not called.** The PageIndex key is stored and the branch is
   selected by `retrieval_backend`, but retrieval runs as local heading-tree reasoning

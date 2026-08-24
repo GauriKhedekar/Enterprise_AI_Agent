@@ -183,6 +183,44 @@ class PaginatedRuns(BaseModel):
 
 
 # ---------- dashboard ----------
+class CompareRequest(BaseModel):
+    queries: list[str] = Field(min_length=1, max_length=5)
+
+
+class BackendResult(BaseModel):
+    backend: str
+    decision: Optional[str] = None
+    reasoning: str = ""
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    cited_evidence: list[CitedEvidence] = Field(default_factory=list)
+    latency_ms: int = 0
+    error: Optional[str] = None
+
+
+class CompareCase(BaseModel):
+    query: str
+    employee_code: Optional[str] = None
+    qdrant: BackendResult
+    pageindex: BackendResult
+    decisions_agree: bool
+    evidence_overlap: float = 0.0
+
+
+class CompareStats(BaseModel):
+    total: int
+    compared: int
+    agreements: int
+    agreement_rate: float
+    avg_latency_qdrant_ms: int
+    avg_latency_pageindex_ms: int
+    avg_evidence_overlap: float
+
+
+class CompareResponse(BaseModel):
+    cases: list[CompareCase]
+    stats: CompareStats
+
+
 class DashboardStats(BaseModel):
     company_name: str
     employee_count: int

@@ -106,6 +106,40 @@ export interface PaginatedRuns {
   decision_counts: Record<string, number>;
 }
 
+export interface BackendResult {
+  backend: string;
+  decision: Decision | null;
+  reasoning: string;
+  evidence: { source: string; text: string; score: number | null; backend: string }[];
+  cited_evidence: CitedEvidence[];
+  latency_ms: number;
+  error: string | null;
+}
+
+export interface CompareCase {
+  query: string;
+  employee_code: string | null;
+  qdrant: BackendResult;
+  pageindex: BackendResult;
+  decisions_agree: boolean;
+  evidence_overlap: number;
+}
+
+export interface CompareStats {
+  total: number;
+  compared: number;
+  agreements: number;
+  agreement_rate: number;
+  avg_latency_qdrant_ms: number;
+  avg_latency_pageindex_ms: number;
+  avg_evidence_overlap: number;
+}
+
+export interface CompareResponse {
+  cases: CompareCase[];
+  stats: CompareStats;
+}
+
 export const STAGE_LABELS: Record<string, string> = {
   credentials: "Credential check",
   input_guardrail: "1 · Input guardrail",

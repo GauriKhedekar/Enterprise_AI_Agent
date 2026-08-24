@@ -7,11 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from lib.dates import today_iso
 from lib.db import db
 from lib.mailer import invite_email_html, send_email
+from lib.pipeline import compare_backends
 from lib.security import CurrentUser, encrypt_secret, hash_password, last4, require_admin
 from models.schemas import (
     ApiKeyCreate,
     ApiKeyPublic,
     ApiKeyRotate,
+    CompareCase,
+    CompareRequest,
+    CompareResponse,
+    CompareStats,
     DashboardStats,
     Employee,
     EmployeeCreate,
@@ -129,6 +134,63 @@ async def list_runs(
         pages=max((total + page_size - 1) // page_size, 1),
         decision_counts=counts,
     )
+
+
+@router.get("/compare/suggestions", response_model=list[str])
+async def compare_suggestions(user: CurrentUser = Depends(require_admin)) -> list[str]:
+    """Distinct past queries from this tenant's runs, newest first."""
+    docs = await db.runs.find({"company_id": user.company_id}, {"_id": 0}).to_list(500)
+    docs.sort(key=lambda d: _aware(d["created_at"]), reverse=True)
+    seen: list[str] = []
+    for d in docs:
+        q = (d.get("query") or "").strip()
+        if q and q not in seen:
+            seen.append(q)
+    return seen[:20]
+
+
+@router.post("/compare", response_model=CompareResponse)
+async def compare_backends_endpoint(
+    payload: CompareRequest, user: CurrentUser = Depends(require_admin)
+) -> CompareResponse:
+    """Run each query through both retrieval backends over the same policy documents."""
+    queries = [q.strip() for q in payload.queries if q and q.strip()][:5]
+    if not queries:
+        raise HTTPException(status_code=422, detail="Provide at least one query")
+
+    # reuse the original asker's employee_code when the query came from a past run
+    codes: dict[str, Optional[str]] = {}
+    for doc in await db.runs.find({"company_id": user.company_id}, {"_id": 0}).to_list(500):
+        q = (doc.get("query") or "").strip()
+        if q and q not in codes:
+            codes[q] = doc.get("employee_code")
+
+    cases: list[dict[str, Any]] = []
+    for q in queries:
+        cases.append(
+            await compare_backends(
+                query=q, company_id=user.company_id, employee_code=codes.get(q)
+            )
+        )
+
+    compared = [c for c in cases if c["qdrant"]["decision"] and c["pageindex"]["decision"]]
+    agreements = sum(1 for c in compared if c["decisions_agree"])
+
+    def avg(key: str) -> int:
+        vals = [c[key]["latency_ms"] for c in cases if c[key]["latency_ms"]]
+        return int(sum(vals) / len(vals)) if vals else 0
+
+    overlaps = [c["evidence_overlap"] for c in cases]
+    stats = {
+        "total": len(cases),
+        "compared": len(compared),
+        "agreements": agreements,
+        "agreement_rate": round(agreements / len(compared), 3) if compared else 0.0,
+        "avg_latency_qdrant_ms": avg("qdrant"),
+        "avg_latency_pageindex_ms": avg("pageindex"),
+        "avg_evidence_overlap": round(sum(overlaps) / len(overlaps), 3) if overlaps else 0.0,
+    }
+    return CompareResponse(cases=[CompareCase(**c) for c in cases], stats=CompareStats(**stats))
 
 
 # ---------------- api keys ----------------

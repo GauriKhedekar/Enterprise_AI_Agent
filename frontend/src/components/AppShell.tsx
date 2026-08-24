@@ -4,6 +4,7 @@ import {
   Activity,
   Clock,
   FileText,
+  GitCompare,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -26,6 +27,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Employees", path: "/company/employees", icon: <Users className="size-4" /> },
   { label: "Policies & GRC", path: "/company/policies", icon: <FileText className="size-4" /> },
   { label: "Agent Run Log", path: "/company/runs", icon: <Activity className="size-4" /> },
+  { label: "Backend Compare", path: "/company/compare", icon: <GitCompare className="size-4" /> },
   { label: "API & AI Backends", path: "/company/api-keys", icon: <KeyRound className="size-4" /> },
 ];
 
