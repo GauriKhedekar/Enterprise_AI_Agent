@@ -33,6 +33,33 @@ EMPLOYEES = [
     ("EMP-0005", "Hannah Weber", "hannah.weber@acmerobotics.com", "People Ops", 2, "active"),
 ]
 
+CREDS = {
+    "gemini": ("Gemini Production", "REDACTED_USE_SEED_GEMINI_API_KEY", None),
+    "qdrant": (
+        "Qdrant EU Central",
+        "REDACTED_USE_SEED_QDRANT_API_KEY",
+        "https://946f9a3c-97a6-4a62-bf3f-38fe303a16d7.eu-central-1-0.aws.cloud.qdrant.io:6333",
+    ),
+    "pageindex": ("PageIndex Cloud", "REDACTED_USE_SEED_PAGEINDEX_API_KEY", None),
+}
+
+LEAVE_POLICY = """# Leave and Attendance Policy
+
+## 1. Annual Leave Entitlement
+Full-time employees accrue **1.75 days of paid annual leave per completed month of
+service**. Leave may be carried over to the following calendar year up to a maximum of
+ten (10) days.
+
+## 2. Probationary Restrictions
+Employees serving a probationary period may not take paid annual leave. Probation ends
+after three (3) months of continuous service unless extended in writing by People Ops.
+
+## 3. Notice Requirements
+Annual leave of three days or more requires fourteen (14) days notice. Single-day leave
+requires forty-eight (48) hours notice. Emergency and bereavement leave are exempt from
+notice requirements.
+"""
+
 WFH_POLICY = """# Work From Home Policy
 
 ## 1. General Allowance
@@ -109,20 +136,28 @@ async def upsert_policy(company_id: str, title: str, content: str, backend: str)
     )
 
 
-async def upsert_key(company_id: str, provider: str, label: str, value: str, created_by: str) -> None:
-    if await db.api_keys.find_one({"company_id": company_id, "provider": provider, "label": label}):
+async def upsert_key(
+    company_id: str, provider: str, label: str, value: str, created_by: str, endpoint=None
+) -> None:
+    payload = {
+        "provider": provider,
+        "label": label,
+        "encrypted_value": encrypt_secret(value),
+        "last_four": last4(value),
+        "endpoint": endpoint,
+        "created_by": created_by,
+    }
+    existing = await db.api_keys.find_one({"company_id": company_id, "provider": provider})
+    if existing:
+        await db.api_keys.update_one({"id": existing["id"]}, {"$set": payload})
         return
     await db.api_keys.insert_one(
         {
             "id": new_id(),
             "company_id": company_id,
-            "provider": provider,
-            "label": label,
-            "encrypted_value": encrypt_secret(value),
-            "last_four": last4(value),
-            "created_by": created_by,
             "created_at": utcnow(),
             "rotated_at": None,
+            **payload,
         }
     )
 
@@ -151,7 +186,9 @@ async def main() -> None:
             await db.employees.insert_one({"id": new_id(), "created_at": utcnow(), **payload})
 
     await upsert_policy(acme, "Work From Home Policy", WFH_POLICY, "pageindex")
-    await upsert_key(acme, "gemini", "Gemini Production", "AIzaSyDemoAcmeGeminiKey9f4T", DEMO["admin_email"])
+    await upsert_policy(acme, "Leave and Attendance Policy", LEAVE_POLICY, "qdrant")
+    for provider, (label, value, endpoint) in CREDS.items():
+        await upsert_key(acme, provider, label, value, DEMO["admin_email"], endpoint)
 
     # Second tenant — used to prove cross-company data is never reachable.
     north = await upsert_company(OTHER["company"])

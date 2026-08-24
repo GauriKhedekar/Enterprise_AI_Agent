@@ -40,6 +40,7 @@ export default function CompanyApiKeys({ me }: { me: Me }) {
   const [provider, setProvider] = useState<Provider>("gemini");
   const [label, setLabel] = useState("");
   const [value, setValue] = useState("");
+  const [endpoint, setEndpoint] = useState("");
   const [rotateTarget, setRotateTarget] = useState<ApiKeyPublic | null>(null);
   const [rotateValue, setRotateValue] = useState("");
 
@@ -55,12 +56,19 @@ export default function CompanyApiKeys({ me }: { me: Me }) {
   };
 
   const create = useMutation({
-    mutationFn: () => apiPost<ApiKeyPublic>("/company/api-keys", { provider, label, value }),
+    mutationFn: () =>
+      apiPost<ApiKeyPublic>("/company/api-keys", {
+        provider,
+        label,
+        value,
+        endpoint: provider === "qdrant" ? endpoint : null,
+      }),
     onSuccess: () => {
       toast.success("API key stored (encrypted)");
       setAddOpen(false);
       setLabel("");
       setValue("");
+      setEndpoint("");
       invalidate();
     },
     onError: (e) => toast.error(errText(e, "Could not store the key")),
@@ -138,7 +146,14 @@ export default function CompanyApiKeys({ me }: { me: Me }) {
                       {PROVIDER_LABELS[k.provider]}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-zinc-200">{k.label}</td>
+                  <td className="px-4 py-3 text-zinc-200">
+                    {k.label}
+                    {k.endpoint ? (
+                      <p className="mt-0.5 truncate font-mono text-[10px] text-zinc-500">
+                        {k.endpoint}
+                      </p>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-400">
                     <span data-testid={`api-key-masked-${k.id}`}>••••••••••••{k.last_four}</span>
                   </td>
@@ -240,6 +255,20 @@ export default function CompanyApiKeys({ me }: { me: Me }) {
                 className="font-mono"
               />
             </div>
+            {provider === "qdrant" ? (
+              <div className="space-y-2">
+                <Label htmlFor="endpoint">Cluster URL</Label>
+                <Input
+                  id="endpoint"
+                  required
+                  value={endpoint}
+                  onChange={(e) => setEndpoint(e.target.value)}
+                  placeholder="https://xxxx.aws.cloud.qdrant.io:6333"
+                  data-testid="api-key-endpoint-input"
+                  className="font-mono"
+                />
+              </div>
+            ) : null}
             <DialogFooter>
               <Button
                 type="submit"

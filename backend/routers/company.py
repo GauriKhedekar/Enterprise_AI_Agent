@@ -1,6 +1,6 @@
 """Company-admin endpoints. Every query is scoped by the authenticated user's company_id."""
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -20,6 +20,7 @@ from models.schemas import (
     InviteResult,
     Policy,
     PolicyCreate,
+    PaginatedRuns,
     Run,
     new_id,
     utcnow,
@@ -95,11 +96,39 @@ async def dashboard(user: CurrentUser = Depends(require_admin)) -> DashboardStat
     )
 
 
-@router.get("/runs", response_model=list[Run])
-async def list_runs(user: CurrentUser = Depends(require_admin)) -> list[Run]:
-    docs = await db.runs.find({"company_id": user.company_id}, {"_id": 0}).to_list(200)
+@router.get("/runs", response_model=PaginatedRuns)
+async def list_runs(
+    page: int = 1,
+    page_size: int = 10,
+    decision: Optional[str] = None,
+    user: CurrentUser = Depends(require_admin),
+) -> PaginatedRuns:
+    """Paginated agent-run log for this tenant, optionally filtered by decision outcome."""
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 50)
+    query: dict[str, Any] = {"company_id": user.company_id}
+    if decision and decision != "ALL":
+        query["decision"] = decision
+
+    total = await db.runs.count_documents(query)
+    docs = await db.runs.find(query, {"_id": 0}).to_list(2000)
     docs.sort(key=lambda d: _aware(d["created_at"]), reverse=True)
-    return [Run(**{**d, "created_at": _aware(d["created_at"])}) for d in docs[:25]]
+    start = (page - 1) * page_size
+    window = docs[start : start + page_size]
+
+    counts: dict[str, int] = {}
+    for row in await db.runs.find({"company_id": user.company_id}, {"_id": 0, "decision": 1}).to_list(2000):
+        key = row.get("decision") or "PENDING"
+        counts[key] = counts.get(key, 0) + 1
+
+    return PaginatedRuns(
+        items=[Run(**{**d, "created_at": _aware(d["created_at"])}) for d in window],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=max((total + page_size - 1) // page_size, 1),
+        decision_counts=counts,
+    )
 
 
 # ---------------- api keys ----------------
@@ -113,6 +142,7 @@ async def list_api_keys(user: CurrentUser = Depends(require_admin)) -> list[ApiK
             provider=d["provider"],
             label=d["label"],
             last_four=d["last_four"],
+            endpoint=d.get("endpoint"),
             created_by=d["created_by"],
             created_at=_aware(d["created_at"]),
             rotated_at=_aware(d.get("rotated_at")),
@@ -131,12 +161,13 @@ async def create_api_key(payload: ApiKeyCreate, user: CurrentUser = Depends(requ
         "label": payload.label.strip(),
         "encrypted_value": encrypt_secret(value),
         "last_four": last4(value),
+        "endpoint": (payload.endpoint or "").strip() or None,
         "created_by": user.email,
         "created_at": utcnow(),
         "rotated_at": None,
     }
     await db.api_keys.insert_one(dict(doc))
-    return ApiKeyPublic(**{k: doc[k] for k in ("id", "provider", "label", "last_four", "created_by", "created_at", "rotated_at")})
+    return ApiKeyPublic(**{k: doc[k] for k in ("id", "provider", "label", "last_four", "endpoint", "created_by", "created_at", "rotated_at")})
 
 
 @router.post("/api-keys/{key_id}/rotate", response_model=ApiKeyPublic)
@@ -157,6 +188,7 @@ async def rotate_api_key(
         provider=existing["provider"],
         label=existing["label"],
         last_four=last4(value),
+        endpoint=existing.get("endpoint"),
         created_by=existing["created_by"],
         created_at=_aware(existing["created_at"]),
         rotated_at=rotated_at,

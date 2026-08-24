@@ -23,6 +23,7 @@ export interface ApiKeyPublic {
   provider: Provider;
   label: string;
   last_four: string;
+  endpoint: string | null;
   created_by: string;
   created_at: string;
   rotated_at: string | null;
@@ -57,17 +58,77 @@ export interface Policy {
   created_at: string;
 }
 
+export type Decision = "ALLOW" | "DENY" | "NOT_ELIGIBLE" | "INSUFFICIENT_INFO" | "BLOCKED";
+
+export interface CitedEvidence {
+  text: string;
+  source: string;
+  match_score: number | null;
+}
+
+export interface TraceStage {
+  name: string;
+  status: string;
+  summary: string;
+  output: Record<string, unknown>;
+  latency_ms: number;
+}
+
 export interface Run {
   id: string;
   company_id: string;
   user_id: string;
+  employee_code: string | null;
+  employee_name: string | null;
   query: string;
-  decision: string | null;
-  cited_evidence: Record<string, unknown>[];
+  status: string;
+  decision: Decision | null;
+  reasoning: string;
+  answer: string;
+  cited_evidence: CitedEvidence[];
   tool_called: string | null;
+  action_taken: boolean;
+  policy_required: boolean | null;
+  enterprise_data_required: boolean | null;
+  action_required: boolean | null;
+  blocked: boolean;
+  trace: TraceStage[];
   latency_ms: number | null;
   created_at: string;
 }
+
+export interface PaginatedRuns {
+  items: Run[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+  decision_counts: Record<string, number>;
+}
+
+export const STAGE_LABELS: Record<string, string> = {
+  credentials: "Credential check",
+  input_guardrail: "1 · Input guardrail",
+  requirement_classifier: "2 · Requirement classifier",
+  policy_retrieval: "3 · Policy retrieval",
+  enterprise_data_lookup: "4 · Enterprise data lookup",
+  evidence_combiner: "5 · Evidence combiner",
+  decision: "6 · Decision",
+  tool_gate: "7 · Tool gate",
+  output_validation: "8 · Output validation",
+};
+
+export const PIPELINE_ORDER = [
+  "credentials",
+  "input_guardrail",
+  "requirement_classifier",
+  "policy_retrieval",
+  "enterprise_data_lookup",
+  "evidence_combiner",
+  "decision",
+  "tool_gate",
+  "output_validation",
+];
 
 export interface DashboardStats {
   company_name: string;

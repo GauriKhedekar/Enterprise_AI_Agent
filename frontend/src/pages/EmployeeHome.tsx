@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, FileText, Send } from "lucide-react";
+import { ChevronDown, FileText, Send } from "lucide-react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
+import DecisionBadge from "@/components/DecisionBadge";
+import PipelineProgress from "@/components/PipelineProgress";
+import RunTrace from "@/components/RunTrace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,10 +14,17 @@ import { ApiError, apiGet, apiPost } from "@/lib/api";
 import { BACKEND_LABELS } from "@/lib/types";
 import type { Employee, Me, Policy, Run } from "@/lib/types";
 
+const EXAMPLES = [
+  "Am I eligible to work from home two days a week?",
+  "How much annual leave have I accrued so far?",
+  "Can I take paid annual leave while on probation?",
+];
+
 export default function EmployeeHome({ me }: { me: Me }) {
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [traceOpen, setTraceOpen] = useState(false);
 
   const profile = useQuery<Employee | null>({
     queryKey: ["employee", "profile"],
@@ -25,20 +35,32 @@ export default function EmployeeHome({ me }: { me: Me }) {
     queryFn: () => apiGet<Policy[]>("/employee/policies"),
   });
 
+  // Poll the run while the background pipeline is still working.
+  const run = useQuery<Run>({
+    queryKey: ["employee", "run", runId],
+    queryFn: () => apiGet<Run>(`/employee/runs/${runId}`),
+    enabled: runId !== null,
+    refetchInterval: (q) => (q.state.data?.status === "running" ? 1200 : false),
+  });
+
+  const result = run.isError ? null : (run.data ?? null);
+  const running = result?.status === "running";
+
   const emp = profile.isError ? null : profile.data;
   const policyList = policies.isError ? [] : (policies.data ?? []);
 
   const submit = useMutation({
     mutationFn: () => apiPost<Run>("/employee/runs", { query }),
-    onSuccess: () => {
-      setSubmitted(true);
-      setQuery("");
+    onSuccess: (created) => {
+      setRunId(created.id);
+      setTraceOpen(false);
+      qc.setQueryData(["employee", "run", created.id], created);
       toast.success("Your request has been received");
       void qc.invalidateQueries({ queryKey: ["employee", "runs"] });
     },
     onError: (err) => {
       const detail = err instanceof ApiError ? (err.body as { detail?: string })?.detail : null;
-      toast.error(typeof detail === "string" ? detail : "Could not submit your question");
+      toast.error(typeof detail === "string" ? detail : "Could not process your question");
     },
   });
 
@@ -46,63 +68,116 @@ export default function EmployeeHome({ me }: { me: Me }) {
     <AppShell
       me={me}
       title="Compliance Assistant"
-      subtitle="Ask about company policy — eligibility, leave, remote work. Requests are logged against your company for review."
+      subtitle="Ask about company policy — eligibility, leave, remote work. Every answer is grounded in your company's policy documents and your own HR record."
     >
       <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-        <div className="rounded-lg border border-[#1e2433] bg-[#11141d] p-6">
-          <form
-            data-testid="ask-question-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit.mutate();
-            }}
-          >
-            <Label htmlFor="question" className="text-sm text-zinc-200">
-              Ask a question
-            </Label>
-            <Textarea
-              id="question"
-              required
-              minLength={3}
-              rows={5}
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setSubmitted(false);
+        <div>
+          <div className="rounded-lg border border-[#1e2433] bg-[#11141d] p-6">
+            <form
+              data-testid="ask-question-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submit.mutate();
               }}
-              placeholder="Am I eligible to work from home two days a week?"
-              data-testid="ask-question-input"
-              className="mt-3"
-            />
-            <div className="mt-4 flex items-center justify-between gap-4">
-              <p className="text-xs text-muted-foreground">
-                Automated decisioning is not enabled yet — your request is queued for review.
-              </p>
-              <Button
-                type="submit"
-                disabled={submit.isPending}
-                data-testid="ask-question-submit-button"
-                className="active:scale-[0.98] transition-transform duration-100"
-              >
-                <Send className="size-3.5" /> {submit.isPending ? "Submitting…" : "Submit"}
-              </Button>
-            </div>
-          </form>
-
-          {submitted ? (
-            <div
-              className="animate-rise mt-6 flex items-start gap-3 rounded-lg border border-[#0f5f4a] bg-[#10b98114] p-4"
-              data-testid="ask-question-confirmation"
             >
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#34d399]" />
-              <div>
-                <p className="text-sm font-medium text-[#34d399]">Your request has been received</p>
-                <p className="mt-1 text-xs text-zinc-400">
-                  It is logged under your employee record and visible in My Requests.
-                </p>
+              <Label htmlFor="question" className="text-sm text-zinc-200">
+                Ask a question
+              </Label>
+              <Textarea
+                id="question"
+                required
+                minLength={3}
+                rows={4}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Am I eligible to work from home two days a week?"
+                data-testid="ask-question-input"
+                className="mt-3"
+              />
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap gap-2">
+                  {EXAMPLES.map((ex, i) => (
+                    <button
+                      key={ex}
+                      type="button"
+                      onClick={() => setQuery(ex)}
+                      data-testid={`example-question-${i}`}
+                      className="rounded-full border border-[#1f2636] px-3 py-1 text-[11px] text-zinc-400 transition-colors duration-150 hover:border-primary hover:text-zinc-100"
+                    >
+                      {ex.length > 38 ? `${ex.slice(0, 38)}…` : ex}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  type="submit"
+                  disabled={submit.isPending || running}
+                  data-testid="ask-question-submit-button"
+                  className="active:scale-[0.98] transition-transform duration-100"
+                >
+                  <Send className="size-3.5" />{" "}
+                  {submit.isPending || running ? "Evaluating…" : "Submit"}
+                </Button>
               </div>
-            </div>
-          ) : null}
+            </form>
+
+            <PipelineProgress active={running} trace={result?.trace ?? []} />
+
+            {result && !running ? (
+              <div className="animate-rise mt-6" data-testid="run-result">
+                <div className="rounded-lg border border-[#252d3f] bg-[#151924] p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+                      Decision
+                    </p>
+                    <DecisionBadge decision={result.decision} testId="run-decision-badge" />
+                  </div>
+                  <p
+                    className="mt-4 text-sm leading-relaxed text-zinc-100"
+                    data-testid="run-answer"
+                  >
+                    {result.answer}
+                  </p>
+                  {result.action_taken ? (
+                    <p
+                      className="mt-3 font-mono text-[11px] text-[#34d399]"
+                      data-testid="run-action-taken"
+                    >
+                      Action executed · {result.tool_called}
+                    </p>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setTraceOpen((v) => !v)}
+                  data-testid="toggle-trace-button"
+                  className="mt-4 flex w-full items-center justify-between rounded-lg border border-[#1e2433] bg-[#11141d] px-4 py-3 text-left transition-colors duration-150 hover:border-[#2d374d]"
+                >
+                  <span className="text-xs font-medium text-zinc-200">How this was decided</span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] text-zinc-500">
+                      {result.trace.length} stages
+                    </span>
+                    <ChevronDown
+                      className={`size-3.5 text-zinc-500 transition-transform duration-200 ${traceOpen ? "rotate-180" : ""}`}
+                    />
+                  </span>
+                </button>
+
+                {traceOpen ? (
+                  <div className="mt-4" data-testid="run-trace-panel">
+                    <RunTrace
+                      trace={result.trace}
+                      citedEvidence={result.cited_evidence}
+                      reasoning={result.reasoning}
+                      latencyMs={result.latency_ms}
+                      idPrefix="run"
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <aside className="space-y-4">

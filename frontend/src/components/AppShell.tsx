@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
+  Activity,
   Clock,
   FileText,
   KeyRound,
@@ -24,6 +25,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Overview", path: "/company/dashboard", icon: <LayoutDashboard className="size-4" /> },
   { label: "Employees", path: "/company/employees", icon: <Users className="size-4" /> },
   { label: "Policies & GRC", path: "/company/policies", icon: <FileText className="size-4" /> },
+  { label: "Agent Run Log", path: "/company/runs", icon: <Activity className="size-4" /> },
   { label: "API & AI Backends", path: "/company/api-keys", icon: <KeyRound className="size-4" /> },
 ];
 

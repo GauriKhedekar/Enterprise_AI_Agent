@@ -2,11 +2,12 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, FileText, KeyRound, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import DecisionBadge from "@/components/DecisionBadge";
 import EmptyState from "@/components/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { apiGet } from "@/lib/api";
-import type { DashboardStats, Me, Run } from "@/lib/types";
+import type { DashboardStats, Me, PaginatedRuns } from "@/lib/types";
 
 const ALL_PROVIDERS = ["gemini", "qdrant", "pageindex"] as const;
 
@@ -15,13 +16,13 @@ export default function CompanyDashboard({ me }: { me: Me }) {
     queryKey: ["company", "dashboard"],
     queryFn: () => apiGet<DashboardStats>("/company/dashboard"),
   });
-  const runs = useQuery<Run[]>({
-    queryKey: ["company", "runs"],
-    queryFn: () => apiGet<Run[]>("/company/runs"),
+  const runs = useQuery<PaginatedRuns>({
+    queryKey: ["company", "runs", "ALL", 1],
+    queryFn: () => apiGet<PaginatedRuns>("/company/runs?page=1&page_size=5&decision=ALL"),
   });
 
   const s = stats.isError ? undefined : stats.data;
-  const runList = runs.isError ? [] : (runs.data ?? []);
+  const runList = runs.isError ? [] : (runs.data?.items ?? []);
 
   const cards = [
     {
@@ -144,12 +145,7 @@ export default function CompanyDashboard({ me }: { me: Me }) {
                   >
                     <td className="max-w-md truncate px-4 py-3 text-zinc-200">{r.query}</td>
                     <td className="px-4 py-3">
-                      <Badge
-                        variant="outline"
-                        className="border-[#2c3348] bg-[#94a3b81a] font-mono text-[11px] text-[#cbd5e1]"
-                      >
-                        {r.decision ?? "pending"}
-                      </Badge>
+                      <DecisionBadge decision={r.decision} testId={`run-badge-${r.id}`} />
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-zinc-500">
                       {new Date(r.created_at).toLocaleString()}

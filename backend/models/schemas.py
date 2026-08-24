@@ -54,11 +54,13 @@ class InviteInfo(BaseModel):
 class ApiKeyCreate(BaseModel):
     provider: Provider
     label: str = Field(min_length=1, max_length=80)
-    value: str = Field(min_length=4, max_length=500)
+    value: str = Field(min_length=4, max_length=2000)
+    # Qdrant needs a cluster URL alongside the key; ignored for other providers.
+    endpoint: Optional[str] = Field(default=None, max_length=300)
 
 
 class ApiKeyRotate(BaseModel):
-    value: str = Field(min_length=4, max_length=500)
+    value: str = Field(min_length=4, max_length=2000)
 
 
 class ApiKeyPublic(BaseModel):
@@ -67,6 +69,7 @@ class ApiKeyPublic(BaseModel):
     provider: Provider
     label: str
     last_four: str
+    endpoint: Optional[str] = None
     created_by: str
     created_at: datetime
     rotated_at: Optional[datetime] = None
@@ -133,16 +136,50 @@ class RunCreate(BaseModel):
     query: str = Field(min_length=3, max_length=2000)
 
 
+class CitedEvidence(BaseModel):
+    text: str
+    source: str
+    match_score: Optional[float] = None
+
+
+class TraceStage(BaseModel):
+    name: str
+    status: str
+    summary: str
+    output: dict[str, Any] = Field(default_factory=dict)
+    latency_ms: int = 0
+
+
 class Run(BaseModel):
     id: str
     company_id: str
     user_id: str
+    employee_code: Optional[str] = None
+    employee_name: Optional[str] = None
     query: str
+    status: str = "complete"
     decision: Optional[str] = None
-    cited_evidence: list[dict[str, Any]] = Field(default_factory=list)
+    reasoning: str = ""
+    answer: str = ""
+    cited_evidence: list[CitedEvidence] = Field(default_factory=list)
     tool_called: Optional[str] = None
+    action_taken: bool = False
+    policy_required: Optional[bool] = None
+    enterprise_data_required: Optional[bool] = None
+    action_required: Optional[bool] = None
+    blocked: bool = False
+    trace: list[TraceStage] = Field(default_factory=list)
     latency_ms: Optional[int] = None
     created_at: datetime
+
+
+class PaginatedRuns(BaseModel):
+    items: list[Run]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+    decision_counts: dict[str, int] = Field(default_factory=dict)
 
 
 # ---------- dashboard ----------
