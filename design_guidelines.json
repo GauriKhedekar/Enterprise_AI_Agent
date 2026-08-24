@@ -1,0 +1,314 @@
+{
+  "theme": "dark",
+  "archetype": "THE_PERFORMANCE_PRO_ENGINEERED",
+  "app_context": "B2B Multi-tenant Enterprise Compliance & Policy AI Assistant",
+  "typography": {
+    "fonts": {
+      "heading": "Outfit, system-ui, sans-serif",
+      "body": "IBM Plex Sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      "mono": "IBM Plex Mono, JetBrains Mono, monospace"
+    },
+    "scale_px": {
+      "display": 48,
+      "h1": 36,
+      "h2": 28,
+      "h3": 20,
+      "h4": 16,
+      "body": 16,
+      "caption": 14
+    },
+    "rules": {
+      "headings": "font-heading font-semibold tracking-tight text-white/95",
+      "body": "font-sans text-base leading-relaxed text-zinc-300 antialiased",
+      "labels": "text-xs uppercase tracking-widest font-mono text-zinc-400",
+      "code_badges": "font-mono text-xs tracking-normal"
+    }
+  },
+  "colors": {
+    "palette_name": "Obsidian Deep Blue with Precision Cobalt Indigo Accent",
+    "accent": "#4F46E5",
+    "on_accent": "#FFFFFF",
+    "accent_hover": "#6366F1",
+    "accent_muted": "rgba(79, 70, 229, 0.15)",
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#0B0D13",
+        "on_bg": "#F3F4F6",
+        "on_bg_muted": "#9CA3AF",
+        "roles": {
+          "link": "#818CF8",
+          "error": "#F87171",
+          "success": "#34D399",
+          "warning": "#FBBF24"
+        }
+      },
+      {
+        "name": "sidebar",
+        "kind": "solid",
+        "bg": "#080A0F",
+        "on_bg": "#E5E7EB",
+        "on_bg_muted": "#858D9D",
+        "roles": {
+          "active_item_bg": "#141824",
+          "active_item_text": "#FFFFFF",
+          "active_border": "#4F46E5",
+          "badge_bg": "#1E2235",
+          "badge_text": "#C7D2FE"
+        }
+      },
+      {
+        "name": "card_panel",
+        "kind": "solid",
+        "bg": "#11141D",
+        "on_bg": "#F9FAFB",
+        "on_bg_muted": "#9CA3AF",
+        "roles": {
+          "border": "#1E2433",
+          "hover_border": "#2E384D",
+          "subtext": "#94A3B8"
+        }
+      },
+      {
+        "name": "card_elevated",
+        "kind": "solid",
+        "bg": "#151924",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#252D3F",
+          "highlight": "#38BDF8"
+        }
+      },
+      {
+        "name": "input_surface",
+        "kind": "solid",
+        "bg": "#0A0C12",
+        "on_bg": "#F3F4F6",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "border": "#1F2636",
+          "focus_border": "#4F46E5",
+          "focus_ring": "rgba(79, 70, 229, 0.25)"
+        }
+      },
+      {
+        "name": "table_row",
+        "kind": "solid",
+        "bg": "#11141D",
+        "on_bg": "#E2E8F0",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "hover_bg": "#161B26",
+          "stripe_bg": "#0E1118",
+          "border": "#1C2230"
+        }
+      },
+      {
+        "name": "badge_status_success",
+        "kind": "solid",
+        "bg": "rgba(16, 185, 129, 0.12)",
+        "on_bg": "#34D399",
+        "on_bg_muted": "#059669"
+      },
+      {
+        "name": "badge_status_warning",
+        "kind": "solid",
+        "bg": "rgba(245, 158, 11, 0.12)",
+        "on_bg": "#FBBF24",
+        "on_bg_muted": "#D97706"
+      },
+      {
+        "name": "badge_status_neutral",
+        "kind": "solid",
+        "bg": "rgba(148, 163, 184, 0.1)",
+        "on_bg": "#CBD5E1",
+        "on_bg_muted": "#64748B"
+      },
+      {
+        "name": "auth_scrim_panel",
+        "kind": "solid",
+        "bg": "#0E1118",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#1E2433"
+        }
+      }
+    ]
+  },
+  "entry_surfaces": {
+    "/login": "split auth screen — architectural compliance positioning grid on left, high-contrast dark login form card on right",
+    "/signup": "split auth screen — company workspace onboarding narrative on left, company creation form on right",
+    "/employee/invite": "centered high-security modal card — set employee password & code confirmation",
+    "/company/dashboard": "two-rail administrative shell — sticky dark sidebar left, metric summary grid + recent compliance runs feed right",
+    "/company/api-keys": "two-rail administrative shell — key provider configuration toolbar top, masked security credential table below",
+    "/company/employees": "two-rail administrative shell — directory header with invite CTA, searchable data grid with department tags",
+    "/company/policies": "two-rail administrative shell — policy repository list and split markdown authoring drawer",
+    "/employee/home": "employee compliance portal — minimal centered intent-first query interface with live policy citation feedback"
+  },
+  "layout_and_navigation": {
+    "shell_structure": "Sidebar + Main Canvas pattern with responsive mobile drawer",
+    "sidebar": {
+      "width": "w-64",
+      "bg": "bg-[#080A0F] border-r border-[#1C2230]",
+      "header": "Logo with glowing cobalt dot + Tenant/Company switcher dropdown badge",
+      "nav_sections": [
+        {
+          "role": "company_admin",
+          "items": [
+            {"label": "Overview", "path": "/company/dashboard", "icon": "LayoutDashboard"},
+            {"label": "Employees", "path": "/company/employees", "icon": "Users"},
+            {"label": "Policies & GRC", "path": "/company/policies", "icon": "FileText"},
+            {"label": "API & AI Backends", "path": "/company/api-keys", "icon": "KeyRound"}
+          ]
+        },
+        {
+          "role": "employee",
+          "items": [
+            {"label": "Compliance Assistant", "path": "/employee/home", "icon": "Sparkles"},
+            {"label": "My Requests", "path": "/employee/history", "icon": "Clock"}
+          ]
+        }
+      ],
+      "footer": "User profile pill with role badge and sign-out action"
+    },
+    "header": {
+      "height": "h-14",
+      "bg": "bg-[#0B0D13]/90 backdrop-blur-md border-b border-[#1C2230]",
+      "components": "Breadcrumbs + Company Tenant Pill + System Status Indicator + User Role Badge"
+    }
+  },
+  "grids_and_spacing": {
+    "density": "High precision, dense layout with generous container breathing room (p-6 to p-8)",
+    "dashboard_stats_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5",
+    "table_padding": "px-4 py-3 text-sm",
+    "card_padding": "p-6 rounded-lg border border-[#1E2433] bg-[#11141D]",
+    "empty_state_spacing": "py-16 px-6 text-center border border-dashed border-[#232B3D] rounded-xl bg-[#0C0F16]"
+  },
+  "components_and_routes": {
+    "theme_css_path": "/app/frontend/src/index.css",
+    "routes": [
+      {
+        "path": "/login",
+        "title": "Adaptive Enterprise Agent — Sign In",
+        "description": "Unified single login for Company Admins and Employees with role-based routing"
+      },
+      {
+        "path": "/signup",
+        "title": "Company Registration",
+        "description": "Company registration and primary admin account creation"
+      },
+      {
+        "path": "/invite/set-password",
+        "title": "Set Password — Employee Onboarding",
+        "description": "Token-based invite acceptance and credential initialization"
+      },
+      {
+        "path": "/company/dashboard",
+        "title": "Enterprise Compliance Overview",
+        "description": "Core metric counters (Employees, Policies, API Keys Status) + recent agent runs stream"
+      },
+      {
+        "path": "/company/api-keys",
+        "title": "AI & Vector Provider Credentials",
+        "description": "Masked list for Gemini, Qdrant, and PageIndex with Add, Rotate, and Revoke controls"
+      },
+      {
+        "path": "/company/employees",
+        "title": "Employee Directory & Service Tenure",
+        "description": "Employee CRUD, service months calculation, department filter, manual add modal, invite modal"
+      },
+      {
+        "path": "/company/policies",
+        "title": "Company Policy Base & RAG Index",
+        "description": "Markdown policy creator, retrieval backend selector (Qdrant vs PageIndex), policy viewer"
+      },
+      {
+        "path": "/employee/home",
+        "title": "Employee Compliance Assistant",
+        "description": "Instant policy query input, live RAG run logging, WFH eligibility determination stream"
+      }
+    ]
+  },
+  "empty_states_design": {
+    "principles": "Never render blank tables or empty rectangles. Every empty state MUST have an informative icon, title, description, and primary actionable button.",
+    "patterns": [
+      {
+        "target": "Employees Table",
+        "title": "No employees registered yet",
+        "description": "Add company members manually or send email invites with secure onboarding links.",
+        "action_label": "Add First Employee"
+      },
+      {
+        "target": "Policies List",
+        "title": "No compliance policies indexed",
+        "description": "Upload or write Markdown policies (e.g. Work From Home, Travel, Benefits) for AI vector retrieval.",
+        "action_label": "Create Policy"
+      },
+      {
+        "target": "API Keys",
+        "title": "No AI backends configured",
+        "description": "Configure your Gemini API key or Qdrant/PageIndex vector endpoints to activate automated answers.",
+        "action_label": "Configure API Key"
+      },
+      {
+        "target": "Agent Runs",
+        "title": "No policy queries processed yet",
+        "description": "When employees ask policy questions or check WFH eligibility, query decisions and citations appear here.",
+        "action_label": "Test Query as Employee"
+      }
+    ]
+  },
+  "motion_and_interactions": {
+    "transitions": "transition-colors duration-150 ease-in-out, transition-opacity duration-150 ease-in-out",
+    "card_hover": "hover:border-[#2D374D] transition-all duration-200",
+    "button_press": "active:scale-[0.98] transition-transform duration-100",
+    "stagger_lists": "staggered fade-in on table rows and activity feed (50ms offset)",
+    "reduced_motion": "@media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }"
+  },
+  "accessibility": {
+    "wcag_compliance": "WCAG AA (4.5:1 for normal text, 3:1 for large UI indicators)",
+    "contrast_audit": {
+      "text_on_page": "#F3F4F6 on #0B0D13 ratio = 17.5:1 (PASS AAA)",
+      "muted_on_page": "#9CA3AF on #0B0D13 ratio = 7.4:1 (PASS AAA)",
+      "text_on_card": "#F9FAFB on #11141D ratio = 16.4:1 (PASS AAA)",
+      "muted_on_card": "#94A3B8 on #11141D ratio = 6.4:1 (PASS AA)",
+      "on_accent_text": "#FFFFFF on #4F46E5 ratio = 8.6:1 (PASS AAA)",
+      "border_contrast": "#1E2433 on #0B0D13 ratio = 1.4:1 (structural hairline)"
+    },
+    "data_testid_policy": "All interactive elements (buttons, inputs, select triggers, table actions, modals, tabs) MUST have kebab-case data-testid attributes."
+  },
+  "image_urls": [
+    {
+      "category": "auth_hero_background",
+      "image_url": "https://images.pexels.com/photos/7827838/pexels-photo-7827838.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Minimalistic high-precision geometric composition on dark canvas for auth side panel backdrop",
+      "usage": "Use as a subtle blended background element with 0.15 opacity and gradient mask on login/signup left panel"
+    },
+    {
+      "category": "abstract_compliance_texture",
+      "image_url": "https://images.pexels.com/photos/9714762/pexels-photo-9714762.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Textured square of light amidst dark architectural shadow",
+      "usage": "Use in compliance documentation hero header or onboarding callout"
+    }
+  ],
+  "instructions_to_main_agent": [
+    "1. Setup font imports in frontend/src/index.css: import '@fontsource-variable/outfit' and '@fontsource/ibm-plex-sans' and '@fontsource/ibm-plex-mono'.",
+    "2. Configure Tailwind theme CSS variables in frontend/src/index.css using the dark Obsidian & Cobalt palette specified in colors.surfaces.",
+    "3. Implement full tenant isolation on all FastAPI endpoints using company_id extracted from authenticated user session.",
+    "4. API Key encryption/masking: Never return plaintext keys. Mask on GET (/api/company/api-keys) showing provider, label, last-4 characters and creation date. Support 'Rotate Key' action.",
+    "5. Employee service_months calculation: Compute service months from joining_date to today_iso() so WFH policy rules (e.g. >= 6 months) can be evaluated dynamically.",
+    "6. Seed demo company with admin login (admin@acme.com / admin123), employee login (sarah@acme.com / employee123), 5 realistic employees, and 1 WFH eligibility policy.",
+    "7. Implement the Employee 'Ask a question' portal with instant feedback, saving runs record with decision, citations, and tool call status.",
+    "8. Ensure every table has high-quality empty states with direct call-to-action buttons as detailed in empty_states_design.",
+    "9. Add data-testid attributes to all form inputs, submit buttons, table rows, delete actions, and navigation links."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
+    "avoid_ai_slop": "Do not build generic centered templates with rainbow gradients. Maintain the crisp, hairline-bordered, high-density Linear-like aesthetic.",
+    "accent_discipline": "Reserve the #4F46E5 cobalt accent ONLY for primary CTAs, active tab/nav indicators, and key focus states. Keep 90% of surfaces dark neutral.",
+    "table_ux": "Use crisp tabular borders with hover highlight, monospace rendering for IDs, API key last-4, and department pill badges.",
+    "toasts": "Use Sonner for all asynchronous action feedback (e.g., 'API Key Rotated', 'Employee Invited', 'Policy Saved')."
+  }
+}
