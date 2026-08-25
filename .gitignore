@@ -97,3 +97,8 @@ credentials.json
 # .env.example is a safe, secret-free template and SHOULD be committed.
 !.env.example
 !**/.env.example
+
+# Machine-generated test artifacts — not source, and they quote command output
+# verbatim (which can include credential-shaped strings).
+test_reports/
+.screenshots/
