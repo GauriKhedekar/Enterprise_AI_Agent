@@ -227,8 +227,7 @@ fallback rather than a crash.
 # from the backend/ directory
 python -m venv .venv
 source .venv/bin/activate           # Windows: .venv\Scripts\activate
-pip install -r backend/requirements.txt
-pip install -r frontend/requirements.txt
+pip install -r requirements.txt
 
 python seed.py                      # creates demo tenants, employees, policies, keys
 uvicorn server:app --reload --port 8001
