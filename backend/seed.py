@@ -1,9 +1,19 @@
 """Idempotent demo seed: two companies (to prove tenant isolation), employees, policy, keys.
 
 Run: cd /app/backend && python seed.py
+
+Provider credentials are read from the environment (see .env.example) — never hardcoded,
+because anything written here lands in git history permanently.
 """
 import asyncio
+import os
 from datetime import date, timedelta
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# this script runs standalone, so it must load .env itself (uvicorn does it in server.py)
+load_dotenv(Path(__file__).parent / ".env")
 
 from lib.db import db
 from lib.security import encrypt_secret, hash_password, last4
@@ -33,14 +43,20 @@ EMPLOYEES = [
     ("EMP-0005", "Hannah Weber", "hannah.weber@acmerobotics.com", "People Ops", 2, "active"),
 ]
 
+def _cred(env_name: str) -> str:
+    """Read a demo provider credential from the environment.
+
+    Credentials are NEVER hardcoded here — this file is committed to git, and a key in
+    source is a key in history forever. Set these in backend/.env (gitignored).
+    """
+    return os.environ.get(env_name, "").strip()
+
+
+# provider -> (label, env var holding the key, env var holding the endpoint or None)
 CREDS = {
-    "gemini": ("Gemini Production", "REDACTED_USE_SEED_GEMINI_API_KEY", None),
-    "qdrant": (
-        "Qdrant EU Central",
-        "REDACTED_USE_SEED_QDRANT_API_KEY",
-        "https://946f9a3c-97a6-4a62-bf3f-38fe303a16d7.eu-central-1-0.aws.cloud.qdrant.io:6333",
-    ),
-    "pageindex": ("PageIndex Cloud", "REDACTED_USE_SEED_PAGEINDEX_API_KEY", None),
+    "gemini": ("Gemini Production", "SEED_GEMINI_API_KEY", None),
+    "qdrant": ("Qdrant EU Central", "SEED_QDRANT_API_KEY", "SEED_QDRANT_URL"),
+    "pageindex": ("PageIndex Cloud", "SEED_PAGEINDEX_API_KEY", None),
 }
 
 LEAVE_POLICY = """# Leave and Attendance Policy
@@ -187,8 +203,16 @@ async def main() -> None:
 
     await upsert_policy(acme, "Work From Home Policy", WFH_POLICY, "pageindex")
     await upsert_policy(acme, "Leave and Attendance Policy", LEAVE_POLICY, "qdrant")
-    for provider, (label, value, endpoint) in CREDS.items():
+
+    seeded, skipped = [], []
+    for provider, (label, key_env, endpoint_env) in CREDS.items():
+        value = _cred(key_env)
+        if not value:
+            skipped.append(f"{provider} (set {key_env})")
+            continue
+        endpoint = _cred(endpoint_env) if endpoint_env else None
         await upsert_key(acme, provider, label, value, DEMO["admin_email"], endpoint)
+        seeded.append(provider)
 
     # Second tenant — used to prove cross-company data is never reachable.
     north = await upsert_company(OTHER["company"])
@@ -215,6 +239,10 @@ async def main() -> None:
     print(f"  Admin    : {DEMO['admin_email']} / {DEMO['admin_password']} ({DEMO['company']})")
     print(f"  Employee : {DEMO['employee_email']} / {DEMO['employee_password']} ({DEMO['company']})")
     print(f"  Other co : {OTHER['admin_email']} / {OTHER['admin_password']} ({OTHER['company']})")
+    print(f"  Providers: seeded={seeded or 'none'}")
+    if skipped:
+        print(f"             skipped={skipped}")
+        print("             (the agent pipeline needs a Gemini key to run)")
 
 
 if __name__ == "__main__":

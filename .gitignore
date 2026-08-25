@@ -87,6 +87,13 @@ android-sdk/
 .env
 .env.*
 *.env
+backend/.env
+frontend/.env
 credentials.json
 *.key
 .credentials
+
+# Negations must come last — a later pattern would otherwise re-ignore these.
+# .env.example is a safe, secret-free template and SHOULD be committed.
+!.env.example
+!**/.env.example
