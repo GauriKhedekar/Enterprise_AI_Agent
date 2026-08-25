@@ -172,6 +172,12 @@ supervisor: `sudo supervisorctl restart backend frontend`.
 
 ## Configuration
 
+Copy the template and fill it in — the real file is gitignored and must never be committed:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
 `backend/.env`:
 
 ```ini
