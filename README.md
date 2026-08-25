@@ -152,25 +152,130 @@ pipeline as a background task, persisting each stage as it completes. The UI pol
 
 ## Running locally
 
+### Prerequisites
+
+| Tool | Version | Notes |
+|---|---|---|
+| Python | 3.11+ | backend |
+| Node.js | 20+ (24 recommended) | frontend |
+| Yarn | 1.22+ | `npm i -g yarn` — **use yarn, not npm** (the lockfile is `yarn.lock`) |
+| MongoDB | 6+ | local, Docker, or a free Atlas cluster |
+
+### 1. Clone
+
 ```bash
-# Backend (Python 3.11)
-cd backend
-pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 8001 --reload
-
-# Frontend (Node 24)
-cd frontend
-yarn install
-yarn dev                 # http://localhost:3000, proxies /api → :8001
-
-# Seed the demo tenants (idempotent)
-cd backend && python seed.py
+git clone https://github.com/GauriKhedekar/Enterprise_AI_Agent.git
+cd Enterprise_AI_Agent
 ```
 
-MongoDB must be reachable at `MONGO_URL`. In the hosted pod all three run under
-supervisor: `sudo supervisorctl restart backend frontend`.
+### 2. Start MongoDB
 
-## Configuration
+Pick whichever you prefer:
+
+```bash
+# Option A — Docker (no install)
+docker run -d --name aea-mongo -p 27017:27017 mongo:7
+
+# Option B — already installed locally
+mongod --dbpath /your/data/path
+
+# Option C — MongoDB Atlas (free tier)
+# create a cluster, then use its connection string as MONGO_URL in step 3
+```
+
+### 3. Configure the backend
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Open `.env` and set, at minimum:
+
+```ini
+MONGO_URL="mongodb://localhost:27017"     # or your Atlas SRV string
+DB_NAME="app"
+JWT_SECRET=<paste output of: openssl rand -hex 32>
+APP_MASTER_KEY=<paste output of: openssl rand -hex 32>
+```
+
+> `APP_MASTER_KEY` encrypts the provider keys stored in the database. Changing it later
+> makes existing stored keys undecryptable, so set it once and keep it.
+
+**To make the AI pipeline actually run**, also add a Gemini key — free from
+[aistudio.google.com/apikey](https://aistudio.google.com/apikey):
+
+```ini
+SEED_GEMINI_API_KEY=AIza...
+```
+
+Optional, for the retrieval comparison page:
+
+```ini
+SEED_QDRANT_API_KEY=...        # free cluster at https://cloud.qdrant.io
+SEED_QDRANT_URL=https://xxxx.aws.cloud.qdrant.io:6333
+SEED_PAGEINDEX_API_KEY=...     # https://dash.pageindex.ai
+```
+
+Without any provider key the app still runs end to end — queries return
+`INSUFFICIENT_INFO` with a "no AI credential configured" stage, which is the designed
+fallback rather than a crash.
+
+### 4. Install and run the backend
+
+```bash
+# from the backend/ directory
+python -m venv .venv
+source .venv/bin/activate           # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+python seed.py                      # creates demo tenants, employees, policies, keys
+uvicorn server:app --reload --port 8001
+```
+
+`seed.py` is idempotent — safe to re-run. It prints the demo logins and which providers it
+seeded.
+
+### 5. Install and run the frontend
+
+In a second terminal:
+
+```bash
+cd frontend
+yarn install
+yarn dev
+```
+
+Open **http://localhost:3000** and sign in with any account from the table above
+(`gauri.khedekar.entc.2023@vpkbiet.org` / `admin123`).
+
+Vite proxies `/api` → `localhost:8001`, so no frontend env var is needed.
+
+### Verify it works
+
+```bash
+curl http://localhost:8001/api/              # {"message":"...","status":"ok"}
+cd backend  && python -m pytest              # 9 guardrail tests
+cd frontend && yarn typecheck                # 0 errors
+```
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| `pymongo.errors.ServerSelectionTimeoutError` | MongoDB isn't running or `MONGO_URL` is wrong |
+| Login returns 401 with the demo credentials | `python seed.py` wasn't run, or it ran against a different `DB_NAME` |
+| Login succeeds but immediately bounces to `/login` | Session cookie rejected. Use `http://localhost:3000` (not `127.0.0.1`) so the cookie's origin matches |
+| Queries return `INSUFFICIENT_INFO`, trace shows "No Gemini credential" | No `SEED_GEMINI_API_KEY` set — add it and re-run `python seed.py` |
+| Trace stage `failed` with HTTP 429 | Gemini free tier is 20 requests/model/day. Wait, or enable billing |
+| `bcrypt` / `passlib` AttributeError on startup | bcrypt 4.1+ broke passlib 1.7.4. Keep the `bcrypt==4.0.1` pin |
+| Port already in use | `uvicorn ... --port 8002` and update `frontend/vite.config.ts`'s proxy target |
+
+> **Hosted pod only:** all three services run under supervisor —
+> `sudo supervisorctl restart backend frontend`, logs in
+> `/var/log/supervisor/{backend,frontend}.err.log`.
+
+## Configuration reference
 
 Copy the template and fill it in — the real file is gitignored and must never be committed:
 
@@ -212,6 +317,7 @@ Results, adversarial traces and benchmark numbers: [`docs/TESTING.md`](docs/TEST
 
 | Doc | Contents |
 |---|---|
+| [`docs/ADOPTION_GUIDE.md`](docs/ADOPTION_GUIDE.md) | **For a company adopting this:** rollout plan, writing policies the agent can use, running the weekly review, security-review answers, costs, limits |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design decisions, data model, request flow, file-by-file map |
 | [`docs/TESTING.md`](docs/TESTING.md) | Unit/browser results, all adversarial guardrail traces |
 | [`docs/RETRIEVAL_BENCHMARK.md`](docs/RETRIEVAL_BENCHMARK.md) | Qdrant vs PageIndex: speed, accuracy, divergence analysis |
