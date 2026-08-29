@@ -23,6 +23,9 @@ from models.schemas import (
     EmployeeUpdate,
     InviteRequest,
     InviteResult,
+    McpToolCreate,
+    McpToolPublic,
+    McpToolUpdate,
     Policy,
     PolicyCreate,
     PaginatedRuns,
@@ -97,6 +100,9 @@ async def dashboard(user: CurrentUser = Depends(require_admin)) -> DashboardStat
         run_count=await db.runs.count_documents({"company_id": cid}),
         pending_invites=await db.users.count_documents(
             {"company_id": cid, "invite_token": {"$ne": None}}
+        ),
+        mcp_tools_enabled=await db.mcp_tools.count_documents(
+            {"company_id": cid, "enabled_for_employees": True}
         ),
     )
 
@@ -262,6 +268,67 @@ async def delete_api_key(key_id: str, user: CurrentUser = Depends(require_admin)
     result = await db.api_keys.delete_one({"id": key_id, "company_id": user.company_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="API key not found")
+
+
+# ---------------- MCP tools ----------------
+def _mcp_tool(doc: dict[str, Any]) -> McpToolPublic:
+    return McpToolPublic(**{**doc, "created_at": _aware(doc["created_at"])})
+
+
+@router.get("/mcp-tools", response_model=list[McpToolPublic])
+async def list_mcp_tools(user: CurrentUser = Depends(require_admin)) -> list[McpToolPublic]:
+    docs = await db.mcp_tools.find({"company_id": user.company_id}, {"_id": 0}).to_list(500)
+    docs.sort(key=lambda d: (d["kind"], d["name"]))
+    return [_mcp_tool(d) for d in docs]
+
+
+@router.post("/mcp-tools", response_model=McpToolPublic, status_code=201)
+async def create_mcp_tool(
+    payload: McpToolCreate, user: CurrentUser = Depends(require_admin)
+) -> McpToolPublic:
+    if await db.mcp_tools.find_one({"company_id": user.company_id, "name": payload.name}):
+        raise HTTPException(status_code=409, detail="An MCP tool with this name already exists")
+    doc = {
+        "id": new_id(),
+        "company_id": user.company_id,
+        "name": payload.name.strip(),
+        "display_name": payload.display_name.strip(),
+        "description": payload.description.strip(),
+        "kind": payload.kind,
+        "server_url": payload.server_url.strip(),
+        "input_schema": payload.input_schema,
+        "enabled_for_employees": payload.enabled_for_employees,
+        "created_by": user.email,
+        "created_at": utcnow(),
+    }
+    await db.mcp_tools.insert_one(dict(doc))
+    return _mcp_tool(doc)
+
+
+@router.put("/mcp-tools/{tool_id}", response_model=McpToolPublic)
+async def update_mcp_tool(
+    tool_id: str, payload: McpToolUpdate, user: CurrentUser = Depends(require_admin)
+) -> McpToolPublic:
+    existing = await db.mcp_tools.find_one({"id": tool_id, "company_id": user.company_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="MCP tool not found")
+    updates = {
+        "display_name": payload.display_name.strip(),
+        "description": payload.description.strip(),
+        "kind": payload.kind,
+        "server_url": payload.server_url.strip(),
+        "input_schema": payload.input_schema,
+        "enabled_for_employees": payload.enabled_for_employees,
+    }
+    await db.mcp_tools.update_one({"id": tool_id, "company_id": user.company_id}, {"$set": updates})
+    return _mcp_tool({**existing, **updates})
+
+
+@router.delete("/mcp-tools/{tool_id}", status_code=204)
+async def delete_mcp_tool(tool_id: str, user: CurrentUser = Depends(require_admin)) -> None:
+    result = await db.mcp_tools.delete_one({"id": tool_id, "company_id": user.company_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="MCP tool not found")
 
 
 # ---------------- employees ----------------

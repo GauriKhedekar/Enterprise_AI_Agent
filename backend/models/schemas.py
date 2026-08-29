@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 Provider = Literal["gemini", "qdrant", "pageindex"]
 Backend = Literal["qdrant", "pageindex"]
 Role = Literal["company_admin", "employee"]
+McpToolKind = Literal["read", "action"]
 
 
 def new_id() -> str:
@@ -73,6 +74,40 @@ class ApiKeyPublic(BaseModel):
     created_by: str
     created_at: datetime
     rotated_at: Optional[datetime] = None
+
+
+# ---------- MCP tools ----------
+class McpToolCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=80, pattern=r"^[a-zA-Z0-9_.-]+$")
+    display_name: str = Field(min_length=2, max_length=120)
+    description: str = Field(min_length=1, max_length=500)
+    kind: McpToolKind
+    server_url: str = Field(min_length=4, max_length=300)
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    enabled_for_employees: bool = True
+
+
+class McpToolUpdate(BaseModel):
+    display_name: str = Field(min_length=2, max_length=120)
+    description: str = Field(min_length=1, max_length=500)
+    kind: McpToolKind
+    server_url: str = Field(min_length=4, max_length=300)
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    enabled_for_employees: bool = True
+
+
+class McpToolPublic(BaseModel):
+    id: str
+    company_id: str
+    name: str
+    display_name: str
+    description: str
+    kind: McpToolKind
+    server_url: str
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    enabled_for_employees: bool
+    created_by: str
+    created_at: datetime
 
 
 # ---------- employees ----------
@@ -229,3 +264,4 @@ class DashboardStats(BaseModel):
     providers_configured: list[str]
     run_count: int
     pending_invites: int
+    mcp_tools_enabled: int = 0

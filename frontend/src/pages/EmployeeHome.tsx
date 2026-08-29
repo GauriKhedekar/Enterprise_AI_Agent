@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, FileText, Send } from "lucide-react";
+import { Cable, ChevronDown, FileText, Send } from "lucide-react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import DecisionBadge from "@/components/DecisionBadge";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiGet, apiPost } from "@/lib/api";
 import { BACKEND_LABELS } from "@/lib/types";
-import type { Employee, Me, Policy, Run } from "@/lib/types";
+import type { Employee, McpToolPublic, Me, Policy, Run } from "@/lib/types";
 
 const EXAMPLES = [
   "Am I eligible to work from home two days a week?",
@@ -34,6 +34,10 @@ export default function EmployeeHome({ me }: { me: Me }) {
     queryKey: ["employee", "policies"],
     queryFn: () => apiGet<Policy[]>("/employee/policies"),
   });
+  const mcpTools = useQuery<McpToolPublic[]>({
+    queryKey: ["employee", "mcp-tools"],
+    queryFn: () => apiGet<McpToolPublic[]>("/employee/mcp-tools"),
+  });
 
   // Poll the run while the background pipeline is still working.
   const run = useQuery<Run>({
@@ -48,6 +52,7 @@ export default function EmployeeHome({ me }: { me: Me }) {
 
   const emp = profile.isError ? null : profile.data;
   const policyList = policies.isError ? [] : (policies.data ?? []);
+  const toolList = mcpTools.isError ? [] : (mcpTools.data ?? []);
 
   const submit = useMutation({
     mutationFn: () => apiPost<Run>("/employee/runs", { query }),
@@ -239,6 +244,34 @@ export default function EmployeeHome({ me }: { me: Me }) {
                         className="mt-1 border-[#2c3348] bg-[#94a3b81a] font-mono text-[10px] text-[#cbd5e1]"
                       >
                         {BACKEND_LABELS[p.retrieval_backend]}
+                      </Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-[#1e2433] bg-[#11141d] p-5">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+              Enabled MCP tools
+            </p>
+            {toolList.length === 0 ? (
+              <p className="mt-3 text-xs text-muted-foreground" data-testid="employee-mcp-tools-empty">
+                No MCP tools have been enabled by your company admin yet.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2.5" data-testid="employee-mcp-tools-list">
+                {toolList.map((tool) => (
+                  <li key={tool.id} className="flex items-start gap-2.5">
+                    <Cable className="mt-0.5 size-3.5 shrink-0 text-zinc-500" />
+                    <div className="min-w-0">
+                      <p className="truncate text-xs text-zinc-200">{tool.display_name}</p>
+                      <Badge
+                        variant="outline"
+                        className="mt-1 border-[#2c3348] bg-[#94a3b81a] font-mono text-[10px] text-[#cbd5e1]"
+                      >
+                        {tool.kind}
                       </Badge>
                     </div>
                   </li>

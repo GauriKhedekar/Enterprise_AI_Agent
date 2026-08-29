@@ -516,20 +516,40 @@ async def run_pipeline(
     if not data_required:
         await record(stage.done("skipped", "No employee record needed for this query."))
     else:
-        named = [c for c in CODE_RE.findall(query.upper()) if c != requester_code]
-        target_code = named[0] if named else requester_code
-        cross_request = bool(named)
-
-        emp = None
-        if target_code:
-            emp = await db.employees.find_one(
-                {"company_id": company_id, "employee_code": target_code}, {"_id": 0}
-            )
-        if emp is None:
+        read_tool = await db.mcp_tools.find_one(
+            {
+                "company_id": company_id,
+                "name": "get_employee_details",
+                "kind": "read",
+                "enabled_for_employees": True,
+            },
+            {"_id": 0},
+        )
+        if not read_tool:
             await record(stage.done(
+                    "failed",
+                    "The get_employee_details MCP read tool is not enabled for employees.",
+                    {"required_tool": "get_employee_details"},
+                ))
+            emp = None
+            target_code = None
+            cross_request = False
+        else:
+            named = [c for c in CODE_RE.findall(query.upper()) if c != requester_code]
+            target_code = named[0] if named else requester_code
+            cross_request = bool(named)
+
+            emp = None
+            if target_code:
+                emp = await db.employees.find_one(
+                    {"company_id": company_id, "employee_code": target_code}, {"_id": 0}
+                )
+        if emp is None:
+            if read_tool:
+                await record(stage.done(
                     "ok" if not target_code else "failed",
                     f"No record found in this company for {target_code or 'the requester'}.",
-                    {"requested_code": target_code},
+                    {"requested_code": target_code, "tool_called": "get_employee_details"},
                 ))
         else:
             months = service_months(_as_date(emp["joining_date"]))
@@ -545,10 +565,10 @@ async def run_pipeline(
             retrieved_codes.add(facts["employee_code"])
             evidence_pool.append(
                 {
-                    "source": f"HR record {facts['employee_code']}",
+                    "source": f"MCP get_employee_details {facts['employee_code']}",
                     "text": "; ".join(f"{k}: {v}" for k, v in facts.items()),
                     "score": None,
-                    "backend": "employees",
+                    "backend": "mcp",
                 }
             )
             await record(stage.done(
@@ -627,21 +647,33 @@ async def run_pipeline(
     # ---- 7. tool gate (plain code, no LLM) ----
     stage = Stage("tool_gate")
     code_ok = referenced_code in retrieved_codes if referenced_code else bool(requester_code in retrieved_codes)
-    action_taken = decision == "ALLOW" and action_required and code_ok
+    action_tool = await db.mcp_tools.find_one(
+        {
+            "company_id": company_id,
+            "name": "submit_wfh_request",
+            "kind": "action",
+            "enabled_for_employees": True,
+        },
+        {"_id": 0},
+    )
+    action_allowed_by_admin = bool(action_tool)
+    action_taken = decision == "ALLOW" and action_required and code_ok and action_allowed_by_admin
     flagged = bool(referenced_code) and referenced_code not in retrieved_codes
     if action_taken:
-        result["tool_called"] = "record_wfh_request"
+        result["tool_called"] = "submit_wfh_request"
         result["action_taken"] = True
     await record(stage.done(
             "blocked" if flagged else "ok",
             (
                 f"Hallucinated employee_code {referenced_code} was never retrieved — action refused."
                 if flagged
-                else f"action_taken={action_taken} (decision={decision}, action_required={action_required}, code_verified={code_ok})"
+                else f"action_taken={action_taken} (decision={decision}, action_required={action_required}, code_verified={code_ok}, admin_enabled={action_allowed_by_admin})"
             ),
             {
                 "action_taken": action_taken,
                 "tool_called": result["tool_called"],
+                "required_tool": "submit_wfh_request" if action_required else None,
+                "admin_enabled": action_allowed_by_admin,
                 "retrieved_employee_codes": sorted(retrieved_codes),
                 "referenced_employee_code": referenced_code or None,
                 "hallucinated_code_flagged": flagged,

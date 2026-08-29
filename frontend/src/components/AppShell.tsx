@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
+  Cable,
   Clock,
   FileText,
   GitCompare,
@@ -28,6 +29,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Policies & GRC", path: "/company/policies", icon: <FileText className="size-4" /> },
   { label: "Agent Run Log", path: "/company/runs", icon: <Activity className="size-4" /> },
   { label: "Backend Compare", path: "/company/compare", icon: <GitCompare className="size-4" /> },
+  { label: "MCP Tools", path: "/company/mcp-tools", icon: <Cable className="size-4" /> },
   { label: "API & AI Backends", path: "/company/api-keys", icon: <KeyRound className="size-4" /> },
 ];
 

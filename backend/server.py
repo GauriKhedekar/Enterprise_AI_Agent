@@ -23,6 +23,8 @@ async def lifespan(app: FastAPI):
     await db.users.create_index("company_id")
     await db.employees.create_index([("company_id", 1), ("employee_code", 1)])
     await db.api_keys.create_index("company_id")
+    await db.mcp_tools.create_index("company_id")
+    await db.mcp_tools.create_index([("company_id", 1), ("name", 1)], unique=True)
     await db.policies.create_index("company_id")
     await db.runs.create_index("company_id")
     yield

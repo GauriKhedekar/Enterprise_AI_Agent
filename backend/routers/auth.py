@@ -32,12 +32,13 @@ COOKIE_MAX_AGE = int(timedelta(days=7).total_seconds())
 
 
 def _set_session(response: Response, user_id: str, company_id: str, role: str) -> None:
+    secure_cookie = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
     response.set_cookie(
         key=SESSION_COOKIE,
         value=create_token(user_id, company_id, role),
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=secure_cookie,
+        samesite="none" if secure_cookie else "lax",
         max_age=COOKIE_MAX_AGE,
         path="/",
     )
@@ -93,7 +94,13 @@ async def login(payload: LoginRequest, response: Response) -> Me:
 
 @router.post("/logout")
 async def logout(response: Response) -> dict[str, bool]:
-    response.delete_cookie(SESSION_COOKIE, path="/", samesite="none", secure=True)
+    secure_cookie = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+    response.delete_cookie(
+        SESSION_COOKIE,
+        path="/",
+        samesite="none" if secure_cookie else "lax",
+        secure=secure_cookie,
+    )
     return {"ok": True}
 
 

@@ -178,6 +178,41 @@ async def upsert_key(
     )
 
 
+async def upsert_mcp_tool(
+    company_id: str,
+    name: str,
+    display_name: str,
+    description: str,
+    kind: str,
+    server_url: str,
+    input_schema: dict,
+    created_by: str,
+    enabled_for_employees: bool = True,
+) -> None:
+    payload = {
+        "display_name": display_name,
+        "description": description,
+        "kind": kind,
+        "server_url": server_url,
+        "input_schema": input_schema,
+        "created_by": created_by,
+        "enabled_for_employees": enabled_for_employees,
+    }
+    existing = await db.mcp_tools.find_one({"company_id": company_id, "name": name})
+    if existing:
+        await db.mcp_tools.update_one({"id": existing["id"]}, {"$set": payload})
+        return
+    await db.mcp_tools.insert_one(
+        {
+            "id": new_id(),
+            "company_id": company_id,
+            "name": name,
+            "created_at": utcnow(),
+            **payload,
+        }
+    )
+
+
 async def main() -> None:
     acme = await upsert_company(DEMO["company"])
     await upsert_user(acme, DEMO["admin_email"], "company_admin", DEMO["admin_password"])
@@ -203,6 +238,37 @@ async def main() -> None:
 
     await upsert_policy(acme, "Work From Home Policy", WFH_POLICY, "pageindex")
     await upsert_policy(acme, "Leave and Attendance Policy", LEAVE_POLICY, "qdrant")
+    await upsert_mcp_tool(
+        acme,
+        "get_employee_details",
+        "Get Employee Details",
+        "Read-only HR directory lookup used for tenure, department, and employment status checks.",
+        "read",
+        "local://hr-mcp",
+        {
+            "type": "object",
+            "properties": {"employee_id": {"type": "string"}},
+            "required": ["employee_id"],
+        },
+        DEMO["admin_email"],
+    )
+    await upsert_mcp_tool(
+        acme,
+        "submit_wfh_request",
+        "Submit WFH Request",
+        "State-changing WFH request tool; the agent can use it only after an ALLOW decision.",
+        "action",
+        "local://hr-mcp",
+        {
+            "type": "object",
+            "properties": {
+                "employee_id": {"type": "string"},
+                "date": {"type": "string", "format": "date"},
+            },
+            "required": ["employee_id", "date"],
+        },
+        DEMO["admin_email"],
+    )
 
     seeded, skipped = [], []
     for provider, (label, key_env, endpoint_env) in CREDS.items():
@@ -218,6 +284,16 @@ async def main() -> None:
     north = await upsert_company(OTHER["company"])
     await upsert_user(north, OTHER["admin_email"], "company_admin", OTHER["admin_password"])
     await upsert_policy(north, "Northwind Travel Policy", NORTHWIND_POLICY, "qdrant")
+    await upsert_mcp_tool(
+        north,
+        "get_employee_details",
+        "Get Employee Details",
+        "Read-only HR directory lookup scoped to Northwind Labs.",
+        "read",
+        "local://hr-mcp",
+        {"type": "object", "properties": {"employee_id": {"type": "string"}}},
+        OTHER["admin_email"],
+    )
     existing = await db.employees.find_one({"company_id": north, "employee_code": "NW-0001"})
     if not existing:
         await db.employees.insert_one(

@@ -10,6 +10,7 @@ import CompanyEmployees from "@/pages/CompanyEmployees";
 import CompanyPolicies from "@/pages/CompanyPolicies";
 import CompanyCompare from "@/pages/CompanyCompare";
 import CompanyRuns from "@/pages/CompanyRuns";
+import CompanyMcpTools from "@/pages/CompanyMcpTools";
 import EmployeeHome from "@/pages/EmployeeHome";
 import EmployeeHistory from "@/pages/EmployeeHistory";
 
@@ -45,6 +46,10 @@ export default function App() {
         <Route
           path="/company/api-keys"
           element={<RequireRole role="company_admin">{(me) => <CompanyApiKeys me={me} />}</RequireRole>}
+        />
+        <Route
+          path="/company/mcp-tools"
+          element={<RequireRole role="company_admin">{(me) => <CompanyMcpTools me={me} />}</RequireRole>}
         />
 
         <Route

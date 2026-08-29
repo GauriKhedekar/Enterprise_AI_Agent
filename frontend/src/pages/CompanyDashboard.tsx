@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, FileText, KeyRound, Users } from "lucide-react";
+import { Activity, Cable, FileText, KeyRound, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import DecisionBadge from "@/components/DecisionBadge";
 import EmptyState from "@/components/EmptyState";
@@ -49,6 +49,14 @@ export default function CompanyDashboard({ me }: { me: Me }) {
       to: "/company/api-keys",
       testId: "stat-keys",
     },
+    {
+      label: "MCP tools",
+      value: s?.mcp_tools_enabled,
+      icon: <Cable className="size-4" />,
+      hint: "Enabled for employees",
+      to: "/company/mcp-tools",
+      testId: "stat-mcp-tools",
+    },
   ];
 
   return (
@@ -57,7 +65,7 @@ export default function CompanyDashboard({ me }: { me: Me }) {
       title="Enterprise Compliance Overview"
       subtitle="Tenant-scoped snapshot of your directory, policy base, and AI backend credentials."
     >
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((c) => (
           <Link
             key={c.label}

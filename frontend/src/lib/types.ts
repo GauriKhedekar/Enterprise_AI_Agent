@@ -2,6 +2,7 @@
 export type Provider = "gemini" | "qdrant" | "pageindex";
 export type RetrievalBackend = "qdrant" | "pageindex";
 export type Role = "company_admin" | "employee";
+export type McpToolKind = "read" | "action";
 
 export interface Me {
   id: string;
@@ -27,6 +28,20 @@ export interface ApiKeyPublic {
   created_by: string;
   created_at: string;
   rotated_at: string | null;
+}
+
+export interface McpToolPublic {
+  id: string;
+  company_id: string;
+  name: string;
+  display_name: string;
+  description: string;
+  kind: McpToolKind;
+  server_url: string;
+  input_schema: Record<string, unknown>;
+  enabled_for_employees: boolean;
+  created_by: string;
+  created_at: string;
 }
 
 export interface Employee {
@@ -172,6 +187,7 @@ export interface DashboardStats {
   providers_configured: string[];
   run_count: number;
   pending_invites: number;
+  mcp_tools_enabled: number;
 }
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
