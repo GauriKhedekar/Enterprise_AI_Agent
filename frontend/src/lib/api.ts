@@ -20,8 +20,11 @@ type JsonBody = unknown;
 
 async function request<T>(method: string, path: string, body?: JsonBody): Promise<T> {
   // Auth rides the httpOnly session cookie automatically — never add auth headers here.
+  // `credentials: "include"` is required for the cookie to travel on cross-origin requests
+  // (Vercel frontend → Render backend); it is harmless same-origin (dev Vite proxy).
   const res = await fetch(`${BASE}${path}`, {
     method,
+    credentials: "include",
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
