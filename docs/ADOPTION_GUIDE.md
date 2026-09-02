@@ -68,16 +68,23 @@ company using the platform.
 ### Step 2 — Add your AI provider key (5 min)
 
 The system uses *your* AI credentials, not a shared pool — so your policy content and
-employee data go to your own provider account under your own terms.
+employee data go to your own provider account under your own terms. Open **API & AI
+Backends**; it shows a **"Which keys should I add?"** guide inline. The short version:
 
-1. Get a Google Gemini API key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+| Provider | Required? | What it does | Where to get it |
+|---|---|---|---|
+| **Google Gemini** | **Required** | Runs the entire agent (guardrail, retrieval reasoning, decision, output check). Without it, every question returns "no AI credential configured". | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| **Qdrant** | Optional | Vector search for policies you tag *Qdrant*; needs a **Cluster URL + API key**. | [cloud.qdrant.io](https://cloud.qdrant.io) |
+| **PageIndex** | Optional | Structure-aware retrieval for policies you tag *PageIndex*. | [dash.pageindex.ai](https://dash.pageindex.ai) |
+
+1. Get a Google Gemini API key (link above) — this is the only one you *need* to go live.
 2. In the app: **API & AI Backends → Configure API key → provider: Google Gemini**, paste it, label it.
+3. Optionally add **Qdrant** (paste the Cluster URL + key) and/or **PageIndex** later if you
+   want to compare retrieval backends.
 
 The key is encrypted immediately. **It is never shown again** — not even to you. The list
 only ever displays the last 4 characters. If you lose it, you rotate it rather than read it
 back. That is deliberate: a system that can show you the key can leak the key.
-
-Optionally add a **Qdrant** cluster (URL + key) for vector search over larger policy sets.
 
 ### Step 3 — Load your employee directory (15 min)
 

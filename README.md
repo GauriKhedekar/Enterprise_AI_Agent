@@ -322,7 +322,18 @@ SENDER_EMAIL=onboarding@resend.dev
 > `/api` proxy locally. Full deployment guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 Provider keys (Gemini / Qdrant / PageIndex) are **not** env vars — they are per-tenant,
-added at `/company/api-keys` and stored encrypted.
+added in-app at **API & AI Backends** (`/company/api-keys`) and stored encrypted. That page
+now shows a **"Which keys should I add?"** guide inline. In short:
+
+| Provider | Required? | Purpose | Get a key |
+|---|---|---|---|
+| **Google Gemini** | **Required** | Powers the whole agent — input guardrail, retrieval reasoning, decision, output check. Without it every question returns "no AI credential configured". | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| **Qdrant** | Optional | Vector search for policies tagged *Qdrant*. Needs a **Cluster URL + API key**. | [cloud.qdrant.io](https://cloud.qdrant.io) |
+| **PageIndex** | Optional | Structure-aware retrieval for policies tagged *PageIndex*. | [dash.pageindex.ai](https://dash.pageindex.ai) |
+
+> Add the Gemini key first to switch the assistant on; the other two only change how policy
+> text is retrieved. Keys are encrypted on save and never shown again — only the last four
+> characters are displayed.
 
 > `APP_MASTER_KEY` is the encryption root. Rotating it makes existing stored provider
 > keys undecryptable — they must be re-entered.

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, RotateCw, Trash2 } from "lucide-react";
+import { Info, KeyRound, RotateCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import EmptyState from "@/components/EmptyState";
@@ -28,6 +28,32 @@ import { PROVIDER_LABELS } from "@/lib/types";
 import type { ApiKeyPublic, Me, Provider } from "@/lib/types";
 
 const KEYS = ["company", "api-keys"];
+
+// Admin-facing guidance: which provider keys to add and where to get them.
+const PROVIDER_GUIDE: { provider: Provider; required: boolean; blurb: string; where: string; url: string }[] = [
+  {
+    provider: "gemini",
+    required: true,
+    blurb:
+      'Powers the whole agent — input guardrail, retrieval reasoning, the decision and the output check. Without it every question returns "no AI credential configured".',
+    where: "aistudio.google.com/apikey",
+    url: "https://aistudio.google.com/apikey",
+  },
+  {
+    provider: "qdrant",
+    required: false,
+    blurb: 'Vector search for policies tagged "Qdrant". Needs a Cluster URL and an API key.',
+    where: "cloud.qdrant.io",
+    url: "https://cloud.qdrant.io",
+  },
+  {
+    provider: "pageindex",
+    required: false,
+    blurb: 'Structure-aware retrieval for policies tagged "PageIndex".',
+    where: "dash.pageindex.ai",
+    url: "https://dash.pageindex.ai",
+  },
+];
 
 function errText(err: unknown, fallback: string): string {
   const detail = err instanceof ApiError ? (err.body as { detail?: string })?.detail : null;
@@ -110,6 +136,51 @@ export default function CompanyApiKeys({ me }: { me: Me }) {
         </Button>
       }
     >
+      <div className="mb-6 rounded-lg border border-[#1e2433] bg-[#11141d] p-5" data-testid="api-key-guide">
+        <div className="flex items-center gap-2">
+          <Info className="size-4 text-[#818cf8]" />
+          <p className="text-sm font-medium text-zinc-100">Which keys should I add?</p>
+        </div>
+        <ul className="mt-3 space-y-3">
+          {PROVIDER_GUIDE.map((g) => (
+            <li
+              key={g.provider}
+              className="flex flex-wrap items-start gap-2 text-sm"
+              data-testid={`api-key-guide-${g.provider}`}
+            >
+              <Badge
+                variant="outline"
+                className="border-[#2c3348] bg-[#4f46e526] font-mono text-[11px] text-[#c7d2fe]"
+              >
+                {PROVIDER_LABELS[g.provider]}
+              </Badge>
+              <Badge
+                variant={g.required ? "default" : "secondary"}
+                className="font-mono text-[10px] uppercase"
+              >
+                {g.required ? "Required" : "Optional"}
+              </Badge>
+              <span className="min-w-0 flex-1 text-zinc-400">
+                {g.blurb}{" "}
+                <a
+                  href={g.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[#818cf8] underline underline-offset-2 hover:text-[#a5b4fc]"
+                >
+                  Get a key → {g.where}
+                </a>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 border-t border-[#1c2230] pt-3 text-[11px] text-zinc-500">
+          Start with Gemini to switch the assistant on. Qdrant and PageIndex are optional and
+          only affect how policy text is retrieved. Keys are encrypted on save and never shown
+          again — only the last four characters are displayed.
+        </p>
+      </div>
+
       {list.length === 0 ? (
         <EmptyState
           testId="api-keys-empty-state"
@@ -230,6 +301,12 @@ export default function CompanyApiKeys({ me }: { me: Me }) {
                   </SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-[11px] text-zinc-500" data-testid="api-key-provider-hint">
+                {PROVIDER_GUIDE.find((g) => g.provider === provider)?.required
+                  ? "Required. "
+                  : "Optional. "}
+                {PROVIDER_GUIDE.find((g) => g.provider === provider)?.blurb}
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="label">Label</Label>
