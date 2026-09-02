@@ -176,7 +176,8 @@ export default function CompanyApiKeys({ me }: { me: Me }) {
         </ul>
         <p className="mt-3 border-t border-[#1c2230] pt-3 text-[11px] text-zinc-500">
           Start with Gemini to switch the assistant on. Qdrant and PageIndex are optional and
-          only affect how policy text is retrieved. Keys are encrypted on save and never shown
+          only affect how policy text is retrieved. For real email notifications (such as HR invites), add{" "}
+          <code className="font-mono text-zinc-400">RESEND_API_KEY</code> to your Render environment variables. Keys are encrypted on save and never shown
           again — only the last four characters are displayed.
         </p>
       </div>
