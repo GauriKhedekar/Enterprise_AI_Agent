@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from lib.dates import today_iso
 from lib.db import db
-from lib.mailer import invite_email_html, send_email
+from lib.mailer import hr_invite_email_html, invite_email_html, send_email
 from lib.mcp_tools import default_requires_approval
 from lib.pipeline import compare_backends
 from lib.security import CurrentUser, encrypt_secret, hash_password, last4, require_admin, require_hr_or_admin
@@ -31,6 +31,8 @@ from models.schemas import (
     PolicyCreate,
     PaginatedRuns,
     Run,
+    TeamInviteRequest,
+    TeamMember,
     new_id,
     utcnow,
 )
@@ -455,6 +457,77 @@ async def invite_employee(
         invite_email_html((company or {}).get("name", "your company"), emp["employee_code"], invite_url),
     )
     return InviteResult(email=email, token=token, invite_url=invite_url, email_sent=sent)
+
+
+# ---------------- team (company admins + HR) ----------------
+@router.get("/team", response_model=list[TeamMember])
+async def list_team(user: CurrentUser = Depends(require_admin)) -> list[TeamMember]:
+    docs = await db.users.find(
+        {"company_id": user.company_id, "role": {"$in": ["company_admin", "hr"]}}, {"_id": 0}
+    ).to_list(200)
+    docs.sort(key=lambda d: (d["role"] != "company_admin", d["email"]))
+    return [
+        TeamMember(
+            id=d["id"],
+            email=d["email"],
+            role=d["role"],
+            employee_code=d.get("employee_code"),
+            status="invited" if d.get("invite_token") else "active",
+        )
+        for d in docs
+    ]
+
+
+@router.post("/team/invite", response_model=InviteResult)
+async def invite_hr(
+    payload: TeamInviteRequest, request: Request, user: CurrentUser = Depends(require_admin)
+) -> InviteResult:
+    """Invite (or re-invite) an HR user by email. Reuses the single-use invite/accept flow."""
+    email = payload.email.lower()
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing and existing["company_id"] != user.company_id:
+        raise HTTPException(status_code=409, detail="This email already belongs to another company")
+    if existing and existing.get("role") == "company_admin":
+        raise HTTPException(status_code=409, detail="This user is already a company admin")
+
+    token = new_invite_token()
+    if existing:
+        await db.users.update_one(
+            {"id": existing["id"]},
+            {"$set": {"role": "hr", "invite_token": token, "password_hash": None, "employee_code": None}},
+        )
+    else:
+        await db.users.insert_one(
+            {
+                "id": new_id(),
+                "company_id": user.company_id,
+                "email": email,
+                "role": "hr",
+                "employee_code": None,
+                "password_hash": None,
+                "invite_token": token,
+                "created_at": utcnow(),
+            }
+        )
+
+    company = await db.companies.find_one({"id": user.company_id}, {"_id": 0})
+    invite_url = f"{app_base_url(request)}/invite/{token}"
+    sent = await send_email(
+        email,
+        f"Your {(company or {}).get('name', 'workspace')} HR account",
+        hr_invite_email_html((company or {}).get("name", "your company"), invite_url),
+    )
+    return InviteResult(email=email, token=token, invite_url=invite_url, email_sent=sent)
+
+
+@router.delete("/team/{user_id}", status_code=204)
+async def revoke_team_member(user_id: str, user: CurrentUser = Depends(require_admin)) -> None:
+    target = await db.users.find_one({"id": user_id, "company_id": user.company_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Team member not found")
+    if target["role"] != "hr":
+        raise HTTPException(status_code=400, detail="Only HR members can be removed here")
+    await db.users.delete_one({"id": user_id, "company_id": user.company_id})
 
 
 # ---------------- policies ----------------

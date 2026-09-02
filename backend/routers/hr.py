@@ -4,6 +4,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from lib.db import db
+from lib.mailer import action_resolved_email_html, send_email
 from lib.mcp_tools import execute_action_tool, validate_tool_args
 from lib.rate_limit import check_rate_limit
 from lib.security import CurrentUser, require_hr_or_admin
@@ -11,6 +12,32 @@ from models.schemas import ActionRequestPublic, ActionRequestResolution, utcnow
 from routers.company import _aware
 
 router = APIRouter(prefix="/hr", tags=["hr"])
+
+
+async def _notify_employee_resolution(
+    company_id: str, doc: dict[str, Any], status: str, note: Optional[str]
+) -> None:
+    """Email the requesting employee that their action request was approved/rejected.
+    Degrades to log-only when no RESEND_API_KEY is configured (see lib/mailer)."""
+    emp = await db.employees.find_one(
+        {"company_id": company_id, "employee_code": doc.get("employee_code")}, {"_id": 0}
+    )
+    email = (emp or {}).get("email")
+    if not email:
+        return
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    tool = await db.mcp_tools.find_one(
+        {"company_id": company_id, "name": doc.get("tool_name")}, {"_id": 0}
+    )
+    display = (tool or {}).get("display_name") or doc.get("tool_name", "action")
+    request_date = (doc.get("tool_call_args") or {}).get("date")
+    await send_email(
+        email,
+        f"Your {display} request was {status}",
+        action_resolved_email_html(
+            (company or {}).get("name", "your company"), display, status, note, request_date
+        ),
+    )
 
 
 def _action_request(doc: dict[str, Any]) -> ActionRequestPublic:
@@ -97,6 +124,7 @@ async def approve_action_request(
             }
         },
     )
+    await _notify_employee_resolution(user.company_id, doc, "approved", payload.resolution_note)
     return _action_request({**doc, **updates})
 
 
@@ -147,4 +175,5 @@ async def reject_action_request(
             }
         },
     )
+    await _notify_employee_resolution(user.company_id, doc, "rejected", payload.resolution_note)
     return _action_request({**doc, **updates})

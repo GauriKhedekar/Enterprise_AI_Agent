@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LogOut,
   Sparkles,
+  UserCog,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ interface NavItem {
 const ADMIN_NAV: NavItem[] = [
   { label: "Overview", path: "/company/dashboard", icon: <LayoutDashboard className="size-4" /> },
   { label: "Employees", path: "/company/employees", icon: <Users className="size-4" /> },
+  { label: "Team & HR", path: "/company/team", icon: <UserCog className="size-4" /> },
   { label: "HR Approvals", path: "/hr/approvals", icon: <CheckSquare className="size-4" /> },
   { label: "Policies & GRC", path: "/company/policies", icon: <FileText className="size-4" /> },
   { label: "Agent Run Log", path: "/company/runs", icon: <Activity className="size-4" /> },

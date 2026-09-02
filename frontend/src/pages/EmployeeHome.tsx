@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cable, ChevronDown, FileText, Send } from "lucide-react";
+import { Cable, ChevronDown, FileText, Home, Send } from "lucide-react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import DecisionBadge from "@/components/DecisionBadge";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiGet, apiPost } from "@/lib/api";
 import { BACKEND_LABELS } from "@/lib/types";
-import type { Employee, McpToolPublic, Me, Policy, Run } from "@/lib/types";
+import type { Employee, McpToolPublic, Me, Policy, Run, WfhUsage } from "@/lib/types";
 
 const EXAMPLES = [
   "Am I eligible to work from home two days a week?",
@@ -38,6 +38,10 @@ export default function EmployeeHome({ me }: { me: Me }) {
     queryKey: ["employee", "mcp-tools"],
     queryFn: () => apiGet<McpToolPublic[]>("/employee/mcp-tools"),
   });
+  const wfh = useQuery<WfhUsage>({
+    queryKey: ["employee", "wfh-usage"],
+    queryFn: () => apiGet<WfhUsage>("/employee/wfh-usage"),
+  });
 
   // Poll the run while the background pipeline is still working.
   const run = useQuery<Run>({
@@ -62,6 +66,7 @@ export default function EmployeeHome({ me }: { me: Me }) {
       qc.setQueryData(["employee", "run", created.id], created);
       toast.success("Your request has been received");
       void qc.invalidateQueries({ queryKey: ["employee", "runs"] });
+      void qc.invalidateQueries({ queryKey: ["employee", "wfh-usage"] });
     },
     onError: (err) => {
       const detail = err instanceof ApiError ? (err.body as { detail?: string })?.detail : null;
@@ -78,6 +83,36 @@ export default function EmployeeHome({ me }: { me: Me }) {
       <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
         <div>
           <div className="rounded-lg border border-[#1e2433] bg-[#11141d] p-6">
+            {wfh.data ? (
+              <div
+                className="mb-5 flex items-center justify-between gap-3 rounded-lg border border-[#252d3f] bg-[#151924] px-4 py-3"
+                data-testid="wfh-meter"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Home className="size-4 text-[#818cf8]" />
+                  <div>
+                    <p className="text-sm text-zinc-100" data-testid="wfh-meter-remaining">
+                      {wfh.data.remaining} of {wfh.data.cap} work-from-home {wfh.data.cap === 1 ? "day" : "days"} left this week
+                    </p>
+                    <p className="font-mono text-[10px] text-zinc-500">
+                      week of {wfh.data.week_start}
+                      {wfh.data.used_days.length > 0 ? ` · booked: ${wfh.data.used_days.join(", ")}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-1" data-testid="wfh-meter-dots">
+                  {Array.from({ length: wfh.data.cap }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={
+                        "size-2.5 rounded-full " +
+                        (i < wfh.data!.cap - wfh.data!.remaining ? "bg-[#fbbf24]" : "bg-[#34d399]")
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <form
               data-testid="ask-question-form"
               onSubmit={(e) => {

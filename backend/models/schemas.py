@@ -182,6 +182,28 @@ class InviteResult(BaseModel):
     email_sent: bool
 
 
+# ---------- team (company admins + HR) ----------
+class TeamMember(BaseModel):
+    id: str
+    email: str
+    role: Role
+    employee_code: Optional[str] = None
+    status: Literal["active", "invited"]
+
+
+class TeamInviteRequest(BaseModel):
+    email: EmailStr
+
+
+# ---------- WFH weekly usage (employee meter) ----------
+class WfhUsage(BaseModel):
+    week_start: str
+    week_end: str
+    cap: int
+    used_days: list[str] = Field(default_factory=list)
+    remaining: int
+
+
 # ---------- policies ----------
 class PolicyCreate(BaseModel):
     title: str = Field(min_length=2, max_length=160)

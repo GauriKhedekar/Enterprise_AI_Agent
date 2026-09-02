@@ -56,3 +56,54 @@ def invite_email_html(company_name: str, employee_code: str, invite_url: str) ->
   </td></tr>
 </table>
 """
+
+
+def hr_invite_email_html(company_name: str, invite_url: str) -> str:
+    return f"""
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0d13;padding:32px 0;font-family:Arial,Helvetica,sans-serif">
+  <tr><td align="center">
+    <table width="520" cellpadding="0" cellspacing="0" style="background:#11141d;border:1px solid #1e2433;border-radius:12px;padding:32px">
+      <tr><td style="color:#ffffff;font-size:20px;font-weight:600;padding-bottom:8px">
+        You have been invited to {company_name} as HR
+      </td></tr>
+      <tr><td style="color:#9ca3af;font-size:14px;line-height:22px;padding-bottom:20px">
+        You can review and approve or reject employee action requests in the Adaptive
+        Enterprise Agent. Set a password to activate your HR account.
+      </td></tr>
+      <tr><td style="padding-bottom:20px">
+        <a href="{invite_url}" style="background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;display:inline-block">
+          Set your password
+        </a>
+      </td></tr>
+      <tr><td style="color:#64748b;font-size:12px;word-break:break-all">{invite_url}</td></tr>
+    </table>
+  </td></tr>
+</table>
+"""
+
+
+def action_resolved_email_html(
+    company_name: str, tool_display: str, status: str, note: str | None, request_date: str | None
+) -> str:
+    tone = "#34d399" if status == "approved" else "#f87171"
+    detail = f" for {request_date}" if request_date else ""
+    note_row = (
+        f'<tr><td style="color:#9ca3af;font-size:13px;padding-top:8px">Note from HR: {note}</td></tr>'
+        if note
+        else ""
+    )
+    return f"""
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0d13;padding:32px 0;font-family:Arial,Helvetica,sans-serif">
+  <tr><td align="center">
+    <table width="520" cellpadding="0" cellspacing="0" style="background:#11141d;border:1px solid #1e2433;border-radius:12px;padding:32px">
+      <tr><td style="color:#ffffff;font-size:20px;font-weight:600;padding-bottom:8px">
+        Your {tool_display} request was <span style="color:{tone}">{status}</span>
+      </td></tr>
+      <tr><td style="color:#9ca3af;font-size:14px;line-height:22px">
+        Your request{detail} at {company_name} has been {status} by HR.
+      </td></tr>
+      {note_row}
+    </table>
+  </td></tr>
+</table>
+"""

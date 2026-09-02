@@ -7,15 +7,17 @@ streams real progress to the UI by polling.
 """
 import asyncio
 import logging
+from datetime import date
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.db import db
+from lib.dates import today_iso
 from lib.mcp_tools import default_requires_approval
-from lib.pipeline import run_pipeline
+from lib.pipeline import WEEKLY_WFH_CAP, _week_bounds, _wfh_days_used_this_week, run_pipeline
 from lib.security import CurrentUser, require_employee
-from models.schemas import ActionRequestPublic, Employee, McpToolPublic, Policy, Run, RunCreate, new_id, utcnow
+from models.schemas import ActionRequestPublic, Employee, McpToolPublic, Policy, Run, RunCreate, WfhUsage, new_id, utcnow
 from routers.company import _aware, _as_date, service_months
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,22 @@ async def visible_policies(user: CurrentUser = Depends(require_employee)) -> lis
     docs = await db.policies.find({"company_id": user.company_id}, {"_id": 0}).to_list(500)
     docs.sort(key=lambda d: _aware(d["created_at"]), reverse=True)
     return [Policy(**{**d, "created_at": _aware(d["created_at"])}) for d in docs]
+
+
+@router.get("/wfh-usage", response_model=WfhUsage)
+async def wfh_usage(user: CurrentUser = Depends(require_employee)) -> WfhUsage:
+    """This employee's approved+pending WFH days for the current calendar week, and how many
+    of the weekly cap remain — powers the meter on the ask screen."""
+    today = date.fromisoformat(today_iso())
+    used = await _wfh_days_used_this_week(user.company_id, user.employee_code or "", today)
+    monday, sunday = _week_bounds(today)
+    return WfhUsage(
+        week_start=monday.isoformat(),
+        week_end=sunday.isoformat(),
+        cap=WEEKLY_WFH_CAP,
+        used_days=used,
+        remaining=max(WEEKLY_WFH_CAP - len(used), 0),
+    )
 
 
 @router.get("/mcp-tools", response_model=list[McpToolPublic])

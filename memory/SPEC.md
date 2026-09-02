@@ -48,14 +48,32 @@ lookups by id, so guessing another tenant's UUID returns 404.
   `POST /company/api-keys/{id}/rotate`, `DELETE /company/api-keys/{id}`
 - `GET|POST /company/employees`, `PUT|DELETE /company/employees/{id}`,
   `POST /company/employees/invite`
+- `GET /company/team` (company_admin + hr users), `POST /company/team/invite` (invite an HR
+  user by email → single-use invite/accept flow), `DELETE /company/team/{id}` (revoke an HR
+  user; cannot remove a company_admin)
 - `GET|POST /company/policies`, `DELETE /company/policies/{id}`
-- `GET /employee/profile` `GET /employee/policies` `GET|POST /employee/runs`
+- `GET /employee/profile` `GET /employee/policies` `GET /employee/wfh-usage` (this week's
+  approved+pending WFH days + remaining, powers the ask-screen meter) `GET|POST /employee/runs`
   `GET /employee/runs/{id}` (polled while `status == "running"`)
 
 ## Routes
 `/login`, `/signup`, `/invite/:token`, `/company/dashboard`, `/company/employees`,
-`/company/policies`, `/company/runs`, `/company/api-keys`, `/employee/home`,
-`/employee/history`.
+`/company/team` (admin: invite/revoke HR), `/company/policies`, `/company/runs`,
+`/company/api-keys`, `/hr/approvals`, `/employee/home`, `/employee/history`.
+
+## HR user provisioning & notifications
+- Company admins create HR logins from the **Team & HR** page (`/company/team`): invite by
+  email → the invitee sets a password via the existing `/invite/:token` accept flow → logs
+  in with role `hr` and can approve/reject at `/hr/approvals`. HR users have no employee_code.
+- HR approve/reject sends the requesting employee an email (`lib/mailer.action_resolved_email_html`),
+  degrading to log-only when `RESEND_API_KEY` is unset. HR invites use `hr_invite_email_html`.
+
+## Deployment (Render + Vercel + Atlas)
+Cross-origin: frontend `api.ts` reads build-time `VITE_API_BASE_URL` (falls back to the Vite
+`/api` proxy locally) and sends `credentials:"include"`; backend cookie is `Secure;
+SameSite=None` in production and `CORS_ORIGINS` must be the exact Vercel origin (no `*`).
+Artifacts: `render.yaml`, `frontend/vercel.json`, `frontend/.env.production.example`,
+`docs/DEPLOYMENT.md`.
 
 ## Seed facts (`python seed.py`)
 - Acme Robotics: 6 employees EMP-0001..EMP-0006. Five full-time with tenure 26/14/8/3/2

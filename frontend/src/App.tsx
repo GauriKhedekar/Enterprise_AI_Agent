@@ -7,6 +7,7 @@ import AcceptInvite from "@/pages/AcceptInvite";
 import CompanyDashboard from "@/pages/CompanyDashboard";
 import CompanyApiKeys from "@/pages/CompanyApiKeys";
 import CompanyEmployees from "@/pages/CompanyEmployees";
+import CompanyTeam from "@/pages/CompanyTeam";
 import CompanyPolicies from "@/pages/CompanyPolicies";
 import CompanyCompare from "@/pages/CompanyCompare";
 import CompanyRuns from "@/pages/CompanyRuns";
@@ -31,6 +32,10 @@ export default function App() {
         <Route
           path="/company/employees"
           element={<RequireRole role={["company_admin", "hr"]}>{(me) => <CompanyEmployees me={me} />}</RequireRole>}
+        />
+        <Route
+          path="/company/team"
+          element={<RequireRole role="company_admin">{(me) => <CompanyTeam me={me} />}</RequireRole>}
         />
         <Route
           path="/company/policies"

@@ -86,6 +86,22 @@ export interface InviteResult {
   email_sent: boolean;
 }
 
+export interface TeamMember {
+  id: string;
+  email: string;
+  role: Role;
+  employee_code: string | null;
+  status: "active" | "invited";
+}
+
+export interface WfhUsage {
+  week_start: string;
+  week_end: string;
+  cap: number;
+  used_days: string[];
+  remaining: number;
+}
+
 export interface Policy {
   id: string;
   company_id: string;
