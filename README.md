@@ -16,14 +16,6 @@ clauses, reads the employee's HR record, decides, and shows its full reasoning t
 > on MongoDB Atlas. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the turnkey steps and
 > replace this link with your own Vercel URL once deployed.
 
-| Role | Email | Password |
-|---|---|---|
-| Company admin | `gauri.khedekar.entc.2023@vpkbiet.org` | `admin123` |
-| HR | `hr@acmerobotics.com` | `hr12345` |
-| Employee (26 months tenure → ALLOW) | `priya.sharma@acmerobotics.com` | `employee123` |
-| Employee (2 months tenure → NOT_ELIGIBLE) | `hannah.weber@acmerobotics.com` | `hannah123` |
-| Second tenant (proves isolation) | `admin@northwindlabs.com` | `northwind123` |
-
 ---
 
 ## Table of contents
