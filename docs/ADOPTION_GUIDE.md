@@ -135,6 +135,13 @@ Medical accommodations and company-declared closures override clauses 1 and 2,
 subject to People Ops confirmation.
 ```
 
+> **Two conditions in the example above are enforced in code, not just read by the model:**
+> the **weekly cap** ("two days per calendar week") is counted across an employee's already
+> approved *and* pending requests for that week — a request that would exceed it is denied
+> even if it looks fine on its own — and **"full-time employees"** is checked against each
+> employee's `employment_type`, so a long-tenure contractor is correctly found ineligible on
+> that clause. Write these conditions explicitly and they become genuinely checkable.
+
 **Which retrieval backend to tag?** Short, well-structured documents like the above →
 **PageIndex** (more precise, cites clause paths cleanly). Large or messy document sets →
 **Qdrant**. Unsure? Tag a few each way and use the **Backend Compare** page to see which
@@ -280,12 +287,14 @@ caching would cut AI spend materially. It isn't implemented yet — see Limits.
 
 | Option | Fit | Notes |
 |---|---|---|
-| **Managed / hosted** | Fastest evaluation | Running now — see the demo link in the README |
+| **Free-tier, self-hosted** | Fastest independent deploy | Render (backend) + Vercel (frontend) + MongoDB Atlas — step-by-step in [`docs/DEPLOYMENT.md`](DEPLOYMENT.md) |
+| **Managed / hosted** | Quick evaluation | Development preview link in the README |
 | **Your own cloud** (AWS/GCP/Azure) | Most companies | Container + managed MongoDB (Atlas) in your region |
 | **Fully on-premise** | Strict data-residency rules | Works, but the AI provider call still leaves your network unless you use a private model endpoint |
 
-Setup instructions are in the [README](../README.md#running-locally). Anyone who can deploy
-a Python API and a static frontend can stand it up.
+Setup instructions are in the [README](../README.md#running-locally) and, for a live
+free-tier deployment independent of any single host, [`docs/DEPLOYMENT.md`](DEPLOYMENT.md).
+Anyone who can deploy a Python API and a static frontend can stand it up.
 
 ---
 
@@ -316,8 +325,10 @@ Stated plainly, so nothing is a surprise after you commit:
 - **No response caching**, so identical questions cost full price every time.
 - **English only** — untested on other languages.
 - **No right-to-erasure workflow.** Deleting an employee leaves their historical run traces.
-- **Background processing isn't durable.** A server restart mid-question leaves that one
-  question stuck; the employee simply re-asks. Needs a proper job queue before high volume.
+- **Background processing isn't fully durable.** A crash *inside* a question now resolves
+  that run to an `error` state rather than hanging, but a hard server kill mid-question
+  still leaves it stuck; the employee simply re-asks. Needs a proper job queue before high
+  volume.
 - **Policy versioning is absent.** Editing a policy doesn't snapshot the old version, so a
   trace cites the clause text as retrieved at the time but you can't diff policy history.
 - **AI is not infallible.** The guardrails prevent fabricated citations and unauthorised

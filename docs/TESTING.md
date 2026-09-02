@@ -19,21 +19,21 @@ Reproduce with `scripts/ask.sh` and `scripts/adversarial.sh`.
 
 | Lane | Scope | Result |
 |---|---|---|
-| Backend unit tests | 9 tests: citation validation + PII detection | **9 passed** |
+| Backend unit/integration tests | 26 tests: citation validation, PII detection, weekly WFH cap, production hardening, auth/seed, MCP registry | **26 passed** |
 | TypeScript | Strict typecheck across the frontend | **0 errors** |
 | Decision paths | ALLOW / DENY / NOT_ELIGIBLE / INSUFFICIENT_INFO / BLOCKED | **5/5 correct** |
 | Adversarial guardrails | Injection, hallucinated code, PII requests | **6/6 handled** |
 | Tenant isolation / RBAC | 8 cross-tenant and cross-role probes | **8/8 denied** |
-| Browser (independent subagent) | 5 acceptance criteria | **5/5 passed, 0 bugs** |
+| Browser (independent subagent) | 6 acceptance criteria (employment_type CRUD + regression) | **7/7 passed, 0 bugs** |
 
 ---
 
 ## Unit tests
 
 ```
-$ cd backend && python -m pytest tests/test_guardrails.py -q
-.........                                                    [100%]
-9 passed, 2 warnings in 1.71s
+$ cd backend && python -m pytest -q
+..........................                                   [100%]
+26 passed, 3 warnings in 2.65s
 ```
 
 **`validate_citations`** — the citation grounding gate:
@@ -57,6 +57,34 @@ $ cd backend && python -m pytest tests/test_guardrails.py -q
 
 The last three matter as much as the detections: a guardrail that blocks legitimate answers
 is a broken guardrail.
+
+**`test_weekly_cap.py`** — the weekly WFH cap (Part 1a), enforced across requests:
+
+| Test | Asserts |
+|---|---|
+| `test_week_bounds_monday_to_sunday` | Calendar-week bounds are computed Monday→Sunday |
+| `test_cap_arithmetic` | 2 booked + a 3rd day exceeds the cap; a re-request of an already-booked day does not double-count |
+| `test_ledger_counts_approved_and_pending_and_excludes_current_run` | The ledger counts approved **and** pending days in the week, ignores other weeks, and excludes the current run |
+| `test_second_request_over_cap_is_denied_by_tool_gate` | Full mocked-LLM pipeline: with 2 days already booked, an otherwise-ALLOW request is **overridden to DENY** by the tool gate, no new `action_request` is written |
+| `test_first_request_within_cap_is_submitted_for_approval` | With 1 day booked, a 2nd request is allowed and submitted as a pending `action_request` |
+
+**`test_hardening.py`** — the six production-hardening items (Part 2), one real test each:
+
+| Test | Asserts |
+|---|---|
+| `test_placeholder_jwt_secret_blocks_production_startup` | Placeholder `JWT_SECRET` + `ENV=production` → startup raises |
+| `test_placeholder_master_key_blocks_production_startup` | Placeholder `APP_MASTER_KEY` → startup raises |
+| `test_wildcard_cors_blocks_production_startup` | `CORS_ORIGINS=*` in production → startup raises (was a warning) |
+| `test_strong_config_passes_and_forces_secure_cookie` | Valid config passes and forces `COOKIE_SECURE=true` |
+| `test_session_cookie_is_secure_and_samesite_none_in_production` | Prod cookie is `Secure; SameSite=None; HttpOnly` |
+| `test_session_cookie_is_lax_and_insecure_in_dev` | Dev cookie is `SameSite=Lax`, not Secure |
+| `test_exception_handler_body_is_generic` | The global handler returns only `{"detail":"Internal server error"}` — no stack/detail leak |
+| `test_rate_limiter_raises_429_after_limit` / `test_login_endpoint_returns_429_after_limit` | The limiter and `/auth/login` return 429 once the limit is exceeded |
+| `test_background_pipeline_crash_marks_run_error` | A crashing background pipeline resolves the run to `status="error"`, not stuck `running` |
+
+> Note: this environment has no Gemini/Qdrant/PageIndex keys, so the *live* pipeline halts
+> at the credentials stage by design. The weekly-cap decision path is therefore proven with
+> a mocked LLM in `test_second_request_over_cap_is_denied_by_tool_gate` rather than a live run.
 
 ---
 
@@ -226,19 +254,20 @@ Totals: **0.88s** (blocked at stage 1) → **7.1s** (short path) → **22.4s** (
 
 ## Independent verification
 
-Verified by an independent testing subagent against the live URL — report at
+Verified by an independent testing subagent against the running app — latest report at
 `/app/test_reports/iteration_1.json`:
 
 ```
-passed: 5   failed: 0   flaky: 0   blocked: 0   test_error: 0
+passed: 7   failed: 0   flaky: 0   blocked: 0   test_error: 0
 bugs: []    action_items: []    retest_needed: false
 ```
 
-Criteria covered: injection blocked with a 2-stage trace and `category=prompt_injection`;
-`EMP-9999` producing `hallucinated_code_flagged=true` with `action_taken=false`; PII
-request blocked with no name/email in the DOM; minimised projection containing only the
-four permitted keys; admin run-log filters and expandable per-stage JSON; and the 9 unit
-tests.
+Criteria covered (Parts 1–2 verification): the employees table renders the `employment_type`
+Type column (EMP-0006 Contract vs EMP-0001 Full-time); admin can create and edit an
+employee's employment type and it persists across reload; the type field is a fixed 3-option
+select (no invalid value); an employee role is blocked from the admin employees page; core
+admin navigation loads every page without a blank screen or console error; and the 26-test
+backend suite passes.
 
 ---
 

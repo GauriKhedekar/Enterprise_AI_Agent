@@ -45,8 +45,9 @@ clauses, reads the employee's HR record, decides, and shows its full reasoning t
 
 **For company administrators**
 - **Workspace signup** — creates the company and its first admin in one step.
-- **Employee directory** — CRUD with server-computed `service_months`, plus invite-only
-  onboarding (employees cannot self-register).
+- **Employee directory** — CRUD with server-computed `service_months` and an
+  `employment_type` (full-time / part-time / contract), plus invite-only onboarding
+  (employees cannot self-register).
 - **Policy base** — author Markdown policies and tag each with a retrieval backend.
 - **Provider credentials** — store Gemini / Qdrant / PageIndex keys, encrypted at rest.
   Only the **last 4 characters** are ever returned, to anyone, including the creator.
@@ -137,6 +138,15 @@ pipeline as a background task, persisting each stage as it completes. The UI pol
    `hallucinated_code_flagged` and the action is refused.
 3. **PII scan** — the final answer is scanned against the tenant directory; another
    employee's name or email replaces the answer with a refusal.
+
+**Two eligibility rules enforced in code, not left to the model:**
+- **Weekly WFH cap (2 days/calendar week)** — the tool gate counts the requester's approved
+  **and** pending WFH days for the requested week from the `action_requests` ledger; a
+  request that would exceed the cap is refused and the decision overridden to `DENY`, even
+  when it looks fine read in isolation. The same count is injected as evidence so the
+  decision model sees the cumulative total.
+- **`employment_type`** — passed into the decision evidence, so a policy clause scoped to
+  "full-time employees" is genuinely checkable (a long-tenure *contract* worker fails it).
 
 ---
 
@@ -294,7 +304,9 @@ cp backend/.env.example backend/.env
 ```ini
 MONGO_URL=mongodb://localhost:27017
 DB_NAME=app
-CORS_ORIGINS=*
+CORS_ORIGINS=*                      # dev only; in production must be explicit HTTPS origins
+ENV=development                     # set to `production` on a real deployment
+COOKIE_SECURE=false                 # dev over HTTP; forced true when ENV=production
 JWT_SECRET=<random secret>          # session signing
 APP_MASTER_KEY=<random secret>      # derives the Fernet key for provider secrets
 GEMINI_MODELS=gemini-3-flash-preview,gemini-3.5-flash,gemini-flash-lite-latest,gemini-3.6-flash
@@ -302,6 +314,12 @@ GEMINI_EMBED_MODEL=gemini-embedding-001
 RESEND_API_KEY=                     # optional; empty → invite links shown in the UI
 SENDER_EMAIL=onboarding@resend.dev
 ```
+
+> **Production hardening.** When `ENV=production`, startup **hard-fails** (not just warns)
+> if `JWT_SECRET`/`APP_MASTER_KEY` are placeholder/weak or if `CORS_ORIGINS` is `*`/empty,
+> and session cookies are forced to `Secure; SameSite=None; HttpOnly`. The frontend reads
+> `VITE_API_BASE_URL` (build-time) for cross-origin deployments and falls back to the Vite
+> `/api` proxy locally. Full deployment guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 Provider keys (Gemini / Qdrant / PageIndex) are **not** env vars — they are per-tenant,
 added at `/company/api-keys` and stored encrypted.
@@ -323,6 +341,7 @@ Results, adversarial traces and benchmark numbers: [`docs/TESTING.md`](docs/TEST
 
 | Doc | Contents |
 |---|---|
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | **Deploy off-Emergent on free tiers:** Render (backend) + Vercel (frontend) + MongoDB Atlas, env-var reference, cross-origin cookie setup, post-deploy verification checklist |
 | [`docs/ADOPTION_GUIDE.md`](docs/ADOPTION_GUIDE.md) | **For a company adopting this:** rollout plan, writing policies the agent can use, running the weekly review, security-review answers, costs, limits |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design decisions, data model, request flow, file-by-file map |
 | [`docs/TESTING.md`](docs/TESTING.md) | Unit/browser results, all adversarial guardrail traces |

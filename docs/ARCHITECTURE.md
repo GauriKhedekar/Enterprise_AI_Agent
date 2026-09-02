@@ -36,7 +36,7 @@ MongoDB, six collections. Every document except `companies` carries `company_id`
 | `companies` | `id`, `name`, `created_at` |
 | `users` | `id`, `company_id`, `email` (unique), `role`, `employee_code`, `password_hash`, `invite_token` |
 | `api_keys` | `id`, `company_id`, `provider`, `encrypted_value`, `last_four`, `endpoint`, `label`, `created_by`, `created_at`, `rotated_at` |
-| `employees` | `id`, `company_id`, `employee_code`, `name`, `email`, `department`, `joining_date`, `service_months`, `employment_status` |
+| `employees` | `id`, `company_id`, `employee_code`, `name`, `email`, `department`, `joining_date`, `service_months`, `employment_status`, `employment_type` (`full_time`\|`part_time`\|`contract`) |
 | `policies` | `id`, `company_id`, `title`, `content` (markdown), `retrieval_backend`, `created_at` |
 | `runs` | `id`, `company_id`, `user_id`, `employee_code`, `query`, `status`, `decision`, `reasoning`, `answer`, `cited_evidence[]`, `tool_called`, `action_taken`, the three classifier booleans, `trace[]`, `latency_ms`, `created_at` |
 
@@ -153,8 +153,23 @@ because stage 8 asking the model "did you leak data?" is not a control — it's 
 Requires ≥2 name tokens so a shared given name doesn't false-positive.
 
 Additionally, a third-party lookup in stage 4 returns a **minimised projection**
-(`employee_code`, `department`, `service_months`, `employment_status`) — never name, email
-or joining date.
+(`employee_code`, `department`, `service_months`, `employment_status`, `employment_type`) —
+never name, email or joining date.
+
+### Two eligibility rules enforced in code
+
+**Weekly WFH cap (`_wfh_days_used_this_week` + tool gate).** The 2-day-per-calendar-week
+allowance is cumulative, so it cannot be judged from one request's text. Before the decision
+stage the pipeline injects a "WFH request ledger" evidence item counting the requester's
+approved **and** pending WFH days for the requested week (from `action_requests`, excluding
+the current run); the `tool_gate` then re-checks deterministically and, if `used + this
+request > 2`, refuses the action and **overrides the decision to `DENY`** (trace records
+`weekly_cap_exceeded`). Approved *and* pending both consume the allowance, so two in-flight
+requests can't both slip through.
+
+**`employment_type`.** Carried into the decision evidence so a clause scoped to "full-time
+employees" is genuinely checkable — a 30-month *contract* worker passes the service rule but
+fails the full-time condition, rather than being implicitly assumed eligible.
 
 ---
 
@@ -197,9 +212,11 @@ semantically-complete units rather than top-k fragments.
 a **502** under load. Streaming stage-by-stage progress also turns a mandatory wait into
 visible, trustworthy feedback.
 
-Trade-off: an in-process `asyncio` task dies with the worker. A run interrupted mid-flight
-stays `status="running"` forever. Production would move this to a durable queue (Celery /
-Arq / SQS) with a reaper for stale runs — the stage-emit callback is already the right seam.
+Trade-off: an in-process `asyncio` task dies with the worker. If the task **raises**, the
+run is caught and resolved to `status="error"` (verified in `tests/test_hardening.py`), so
+a crashing pipeline no longer hangs at `running`. A hard worker kill mid-flight is still not
+covered — production would move this to a durable queue (Celery / Arq / SQS) with a reaper
+for stale runs; the stage-emit callback is already the right seam.
 
 ---
 
