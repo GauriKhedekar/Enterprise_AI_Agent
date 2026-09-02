@@ -14,7 +14,9 @@ export function useMe() {
 }
 
 export function homeFor(role: Me["role"]): string {
-  return role === "company_admin" ? "/company/dashboard" : "/employee/home";
+  if (role === "company_admin") return "/company/dashboard";
+  if (role === "hr") return "/hr/approvals";
+  return "/employee/home";
 }
 
 export function useEndSession() {

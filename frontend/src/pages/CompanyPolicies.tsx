@@ -174,7 +174,7 @@ export default function CompanyPolicies({ me }: { me: Me }) {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent data-testid="policy-form-dialog" className="max-w-2xl">
+        <DialogContent data-testid="policy-form-dialog" className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create policy</DialogTitle>
             <DialogDescription>
@@ -226,7 +226,7 @@ export default function CompanyPolicies({ me }: { me: Me }) {
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="# Work From Home Policy&#10;&#10;## 1. General Allowance…"
                 data-testid="policy-content-input"
-                className="font-mono text-xs"
+                className="font-mono text-xs min-h-[300px] resize-y"
               />
             </div>
             <DialogFooter>

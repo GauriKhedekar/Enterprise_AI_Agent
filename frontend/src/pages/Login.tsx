@@ -10,6 +10,12 @@ import { ApiError, apiPost } from "@/lib/api";
 import { ME_KEY, homeFor } from "@/lib/session";
 import type { Me } from "@/lib/types";
 
+function roleName(role: Me["role"]): string {
+  if (role === "company_admin") return "company admin";
+  if (role === "hr") return "HR";
+  return "employee";
+}
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +27,7 @@ export default function Login() {
     onSuccess: (me) => {
       qc.clear();
       qc.setQueryData(ME_KEY, me);
-      toast.success(`Signed in as ${me.role === "company_admin" ? "company admin" : "employee"}`);
+      toast.success(`Signed in as ${roleName(me.role)}`);
       navigate(homeFor(me.role), { replace: true });
     },
     onError: (err) => {
@@ -33,12 +39,12 @@ export default function Login() {
   return (
     <AuthLayout
       eyebrow="Unified access"
-      headline="One sign-in for admins and employees."
-      blurb="Adaptive Enterprise Agent routes you by role the moment you authenticate — administrators land on the compliance console, employees on the policy assistant."
+      headline="One sign-in for every role."
+      blurb="Adaptive Enterprise Agent routes you by role the moment you authenticate: administrators land on the compliance console, HR on approvals, and employees on the policy assistant."
       bullets={[
         "Company data is scoped by tenant on every API call",
         "Provider credentials are encrypted with a server-held master key",
-        "Employees join by invitation only — no open self-signup",
+        "Employees join by invitation only - no open self-signup",
       ]}
     >
       <h1 className="text-2xl font-semibold text-white/95">Sign in</h1>
@@ -76,7 +82,7 @@ export default function Login() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
+            placeholder="********"
             data-testid="login-password-input"
           />
         </div>
@@ -86,7 +92,7 @@ export default function Login() {
           disabled={mutation.isPending}
           data-testid="login-submit-button"
         >
-          {mutation.isPending ? "Signing in…" : "Sign in"}
+          {mutation.isPending ? "Signing in..." : "Sign in"}
         </Button>
       </form>
 
@@ -101,6 +107,9 @@ export default function Login() {
         <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Demo logins</p>
         <p className="mt-2 font-mono text-xs text-zinc-300">
           gauri.khedekar.entc.2023@vpkbiet.org / admin123
+        </p>
+        <p className="mt-1 font-mono text-xs text-zinc-300">
+          hr@acmerobotics.com / hr12345
         </p>
         <p className="mt-1 font-mono text-xs text-zinc-300">
           priya.sharma@acmerobotics.com / employee123

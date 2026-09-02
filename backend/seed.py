@@ -25,8 +25,12 @@ DEMO = {
     "company": "Acme Robotics",
     "admin_email": "gauri.khedekar.entc.2023@vpkbiet.org",
     "admin_password": "admin123",
+    "hr_email": "hr@acmerobotics.com",
+    "hr_password": "hr12345",
     "employee_email": "priya.sharma@acmerobotics.com",
     "employee_password": "employee123",
+    "hannah_email": "hannah.weber@acmerobotics.com",
+    "hannah_password": "hannah123",
 }
 
 OTHER = {
@@ -188,6 +192,7 @@ async def upsert_mcp_tool(
     input_schema: dict,
     created_by: str,
     enabled_for_employees: bool = True,
+    requires_human_approval: bool | None = None,
 ) -> None:
     payload = {
         "display_name": display_name,
@@ -197,6 +202,7 @@ async def upsert_mcp_tool(
         "input_schema": input_schema,
         "created_by": created_by,
         "enabled_for_employees": enabled_for_employees,
+        "requires_human_approval": bool(requires_human_approval) if kind == "action" else False,
     }
     existing = await db.mcp_tools.find_one({"company_id": company_id, "name": name})
     if existing:
@@ -216,7 +222,9 @@ async def upsert_mcp_tool(
 async def main() -> None:
     acme = await upsert_company(DEMO["company"])
     await upsert_user(acme, DEMO["admin_email"], "company_admin", DEMO["admin_password"])
+    await upsert_user(acme, DEMO["hr_email"], "hr", DEMO["hr_password"])
     await upsert_user(acme, DEMO["employee_email"], "employee", DEMO["employee_password"], "EMP-0001")
+    await upsert_user(acme, DEMO["hannah_email"], "employee", DEMO["hannah_password"], "EMP-0005")
 
     for code, name, email, dept, months, status in EMPLOYEES:
         joining = months_ago(months)
@@ -251,6 +259,8 @@ async def main() -> None:
             "required": ["employee_id"],
         },
         DEMO["admin_email"],
+        True,
+        False,
     )
     await upsert_mcp_tool(
         acme,
@@ -268,6 +278,8 @@ async def main() -> None:
             "required": ["employee_id", "date"],
         },
         DEMO["admin_email"],
+        True,
+        True,
     )
 
     seeded, skipped = [], []
@@ -293,6 +305,8 @@ async def main() -> None:
         "local://hr-mcp",
         {"type": "object", "properties": {"employee_id": {"type": "string"}}},
         OTHER["admin_email"],
+        True,
+        False,
     )
     existing = await db.employees.find_one({"company_id": north, "employee_code": "NW-0001"})
     if not existing:
@@ -313,7 +327,9 @@ async def main() -> None:
 
     print("Seed complete.")
     print(f"  Admin    : {DEMO['admin_email']} / {DEMO['admin_password']} ({DEMO['company']})")
+    print(f"  HR       : {DEMO['hr_email']} / {DEMO['hr_password']} ({DEMO['company']})")
     print(f"  Employee : {DEMO['employee_email']} / {DEMO['employee_password']} ({DEMO['company']})")
+    print(f"  Employee (2 mo) : {DEMO['hannah_email']} / {DEMO['hannah_password']} ({DEMO['company']})")
     print(f"  Other co : {OTHER['admin_email']} / {OTHER['admin_password']} ({OTHER['company']})")
     print(f"  Providers: seeded={seeded or 'none'}")
     if skipped:

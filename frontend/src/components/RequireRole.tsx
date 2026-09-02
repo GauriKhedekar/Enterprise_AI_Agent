@@ -4,7 +4,7 @@ import { useMe, homeFor } from "@/lib/session";
 import type { Me, Role } from "@/lib/types";
 
 interface RequireRoleProps {
-  role: Role;
+  role: Role | Role[];
   children: (me: Me) => ReactNode;
 }
 
@@ -23,7 +23,8 @@ export default function RequireRole({ role, children }: RequireRoleProps) {
   }
 
   if (isError || !data) return <Navigate to="/login" replace />;
-  if (data.role !== role) return <Navigate to={homeFor(data.role)} replace />;
+  const allowed = Array.isArray(role) ? role : [role];
+  if (!allowed.includes(data.role)) return <Navigate to={homeFor(data.role)} replace />;
 
   return <>{children(data)}</>;
 }

@@ -48,6 +48,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
   const [editing, setEditing] = useState<Employee | null>(null);
   const [form, setForm] = useState<FormState>(BLANK);
   const [invite, setInvite] = useState<InviteResult | null>(null);
+  const canManage = me.role === "company_admin";
 
   const employees = useQuery<Employee[]>({
     queryKey: KEY,
@@ -131,6 +132,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
       title="Employee Directory & Service Tenure"
       subtitle="Service months are recalculated server-side from each joining date, so policy rules like the six-month WFH minimum stay accurate."
       actions={
+        canManage ? (
         <Button
           onClick={openAdd}
           data-testid="add-employee-button"
@@ -138,6 +140,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
         >
           Add employee
         </Button>
+        ) : null
       }
     >
       {list.length === 0 ? (
@@ -146,8 +149,8 @@ export default function CompanyEmployees({ me }: { me: Me }) {
           icon={<Users className="size-5" />}
           title="No employees registered yet"
           description="Add company members manually, then send email invites with secure onboarding links."
-          actionLabel="Add First Employee"
-          onAction={openAdd}
+          actionLabel={canManage ? "Add First Employee" : undefined}
+          onAction={canManage ? openAdd : undefined}
         />
       ) : (
         <div className="overflow-hidden rounded-lg border border-[#1c2230]">
@@ -160,7 +163,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
                 <th className="px-4 py-3">Joined</th>
                 <th className="px-4 py-3">Tenure</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                {canManage ? <th className="px-4 py-3 text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -197,6 +200,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-zinc-300">{emp.employment_status}</td>
+                  {canManage ? (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1.5">
                       <Button
@@ -227,6 +231,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
                       </Button>
                     </div>
                   </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

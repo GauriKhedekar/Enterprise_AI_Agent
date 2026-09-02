@@ -7,7 +7,7 @@ import DecisionBadge from "@/components/DecisionBadge";
 import EmptyState from "@/components/EmptyState";
 import RunTrace from "@/components/RunTrace";
 import { apiGet } from "@/lib/api";
-import type { Me, Run } from "@/lib/types";
+import type { ActionRequest, Me, Run } from "@/lib/types";
 
 export default function EmployeeHistory({ me }: { me: Me }) {
   const navigate = useNavigate();
@@ -16,7 +16,12 @@ export default function EmployeeHistory({ me }: { me: Me }) {
     queryKey: ["employee", "runs"],
     queryFn: () => apiGet<Run[]>("/employee/runs"),
   });
+  const actionRequests = useQuery<ActionRequest[]>({
+    queryKey: ["employee", "action-requests"],
+    queryFn: () => apiGet<ActionRequest[]>("/employee/action-requests"),
+  });
   const list = runs.isError ? [] : (runs.data ?? []);
+  const requestsByRun = new Map((actionRequests.data ?? []).map((r) => [r.run_id, r]));
 
   return (
     <AppShell
@@ -61,6 +66,15 @@ export default function EmployeeHistory({ me }: { me: Me }) {
                   {r.answer ? (
                     <p className="mt-2.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
                       {r.answer}
+                    </p>
+                  ) : null}
+                  {requestsByRun.has(r.id) ? (
+                    <p className="mt-2 text-xs text-zinc-400">
+                      Approval status:{" "}
+                      <span className="font-mono text-[#c7d2fe]">{requestsByRun.get(r.id)?.status}</span>
+                      {requestsByRun.get(r.id)?.resolution_note
+                        ? ` · ${requestsByRun.get(r.id)?.resolution_note}`
+                        : ""}
                     </p>
                   ) : null}
                   <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-zinc-500">

@@ -37,6 +37,7 @@ interface FormState {
   server_url: string;
   input_schema: string;
   enabled_for_employees: boolean;
+  requires_human_approval: boolean;
 }
 
 const BLANK: FormState = {
@@ -47,6 +48,7 @@ const BLANK: FormState = {
   server_url: "local://hr-mcp",
   input_schema: '{\n  "type": "object",\n  "properties": {}\n}',
   enabled_for_employees: true,
+  requires_human_approval: true,
 };
 
 function errText(err: unknown, fallback: string): string {
@@ -95,6 +97,7 @@ export default function CompanyMcpTools({ me }: { me: Me }) {
       server_url: tool.server_url,
       input_schema: JSON.stringify(tool.input_schema, null, 2),
       enabled_for_employees: tool.enabled_for_employees,
+      requires_human_approval: tool.requires_human_approval,
     });
     setOpen(true);
   };
@@ -108,6 +111,7 @@ export default function CompanyMcpTools({ me }: { me: Me }) {
         server_url: form.server_url,
         input_schema: parseSchema(form.input_schema),
         enabled_for_employees: form.enabled_for_employees,
+        requires_human_approval: form.kind === "action" ? form.requires_human_approval : false,
       };
       if (editing) {
         return apiPut<McpToolPublic>(`/company/mcp-tools/${editing.id}`, payload);
@@ -156,6 +160,7 @@ export default function CompanyMcpTools({ me }: { me: Me }) {
                 <th className="px-4 py-3">Kind</th>
                 <th className="px-4 py-3">Server</th>
                 <th className="px-4 py-3">Employee access</th>
+                <th className="px-4 py-3">Approval</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -179,6 +184,11 @@ export default function CompanyMcpTools({ me }: { me: Me }) {
                       className={tool.enabled_for_employees ? "border-[#0f5f4a] bg-[#10b98120] text-[#34d399]" : "border-[#3d3011] bg-[#f59e0b1f] text-[#fbbf24]"}
                     >
                       {tool.enabled_for_employees ? "enabled" : "disabled"}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant="outline" className="border-[#2c3348] bg-[#94a3b81a] text-[#cbd5e1]">
+                      {tool.kind === "action" && tool.requires_human_approval ? "HR required" : "not required"}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
@@ -260,6 +270,16 @@ export default function CompanyMcpTools({ me }: { me: Me }) {
               />
               Enabled for employees
             </label>
+            {form.kind === "action" ? (
+              <label className="flex items-center gap-2 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={form.requires_human_approval}
+                  onChange={(e) => setForm({ ...form, requires_human_approval: e.target.checked })}
+                />
+                Require HR approval before execution
+              </label>
+            ) : null}
             <DialogFooter>
               <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving..." : "Save tool"}</Button>
             </DialogFooter>

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
   Cable,
+  CheckSquare,
   Clock,
   FileText,
   GitCompare,
@@ -26,11 +27,17 @@ interface NavItem {
 const ADMIN_NAV: NavItem[] = [
   { label: "Overview", path: "/company/dashboard", icon: <LayoutDashboard className="size-4" /> },
   { label: "Employees", path: "/company/employees", icon: <Users className="size-4" /> },
+  { label: "HR Approvals", path: "/hr/approvals", icon: <CheckSquare className="size-4" /> },
   { label: "Policies & GRC", path: "/company/policies", icon: <FileText className="size-4" /> },
   { label: "Agent Run Log", path: "/company/runs", icon: <Activity className="size-4" /> },
   { label: "Backend Compare", path: "/company/compare", icon: <GitCompare className="size-4" /> },
   { label: "MCP Tools", path: "/company/mcp-tools", icon: <Cable className="size-4" /> },
   { label: "API & AI Backends", path: "/company/api-keys", icon: <KeyRound className="size-4" /> },
+];
+
+const HR_NAV: NavItem[] = [
+  { label: "Employees", path: "/company/employees", icon: <Users className="size-4" /> },
+  { label: "HR Approvals", path: "/hr/approvals", icon: <CheckSquare className="size-4" /> },
 ];
 
 const EMPLOYEE_NAV: NavItem[] = [
@@ -50,7 +57,13 @@ export default function AppShell({ me, title, subtitle, actions, children }: App
   const location = useLocation();
   const navigate = useNavigate();
   const endSession = useEndSession();
-  const nav = me.role === "company_admin" ? ADMIN_NAV : EMPLOYEE_NAV;
+  const nav = me.role === "company_admin" ? ADMIN_NAV : me.role === "hr" ? HR_NAV : EMPLOYEE_NAV;
+  const roleLabel =
+    me.role === "company_admin"
+      ? "Company Admin"
+      : me.role === "hr"
+        ? "HR"
+        : `Employee - ${me.employee_code ?? "unknown"}`;
 
   const signOut = async () => {
     await endSession();
@@ -69,10 +82,7 @@ export default function AppShell({ me, title, subtitle, actions, children }: App
 
         <div className="px-5 pt-5 pb-3">
           <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Tenant</p>
-          <p
-            className="mt-1.5 truncate text-sm font-medium text-zinc-200"
-            data-testid="sidebar-company-name"
-          >
+          <p className="mt-1.5 truncate text-sm font-medium text-zinc-200" data-testid="sidebar-company-name">
             {me.company_name}
           </p>
         </div>
@@ -105,7 +115,7 @@ export default function AppShell({ me, title, subtitle, actions, children }: App
               {me.email}
             </p>
             <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-[#c7d2fe]">
-              {me.role === "company_admin" ? "Company Admin" : `Employee · ${me.employee_code ?? "—"}`}
+              {roleLabel}
             </p>
             <Button
               variant="ghost"
@@ -124,7 +134,7 @@ export default function AppShell({ me, title, subtitle, actions, children }: App
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-4 border-b border-[#1c2230] bg-[#0b0d13]/90 px-6 backdrop-blur-md">
           <div className="flex min-w-0 items-center gap-3">
             <span className="hidden font-mono text-[10px] uppercase tracking-widest text-zinc-500 sm:inline">
-              {me.role === "company_admin" ? "Admin" : "Employee"}
+              {me.role === "company_admin" ? "Admin" : me.role === "hr" ? "HR" : "Employee"}
             </span>
             <span className="hidden text-zinc-700 sm:inline">/</span>
             <span className="truncate text-sm text-zinc-300">{title}</span>
@@ -133,13 +143,7 @@ export default function AppShell({ me, title, subtitle, actions, children }: App
             <span className="flex items-center gap-1.5 rounded-full border border-[#1c2230] px-2.5 py-1 text-[11px] text-zinc-400">
               <span className="size-1.5 rounded-full bg-[#34d399]" /> Operational
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={signOut}
-              data-testid="header-sign-out-button"
-              className="md:hidden"
-            >
+            <Button variant="ghost" size="sm" onClick={signOut} data-testid="header-sign-out-button" className="md:hidden">
               <LogOut className="size-3.5" />
             </Button>
           </div>

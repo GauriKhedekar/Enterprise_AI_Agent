@@ -9,13 +9,17 @@ import time
 from typing import Any, Optional
 
 from lib import gemini, retrieval
+from lib.dates import today_iso
 from lib.db import db
+from lib.mcp_tools import action_requires_approval, execute_action_tool, validate_tool_args
 from lib.security import decrypt_secret
+from models.schemas import new_id, utcnow
 
 logger = logging.getLogger(__name__)
 
 DECISIONS = {"ALLOW", "DENY", "NOT_ELIGIBLE", "INSUFFICIENT_INFO"}
 CODE_RE = re.compile(r"\b[A-Z]{2,4}-\d{3,5}\b")
+ISO_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
 GUARDRAIL_SCHEMA = {
     "type": "object",
@@ -327,6 +331,7 @@ async def run_pipeline(
     company_id: str,
     user_id: str,
     requester_code: Optional[str],
+    run_id: Optional[str] = None,
     emit: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Execute all stages and return a run document ready for insertion.
@@ -659,19 +664,67 @@ async def run_pipeline(
     action_allowed_by_admin = bool(action_tool)
     action_taken = decision == "ALLOW" and action_required and code_ok and action_allowed_by_admin
     flagged = bool(referenced_code) and referenced_code not in retrieved_codes
+    approval_status: Optional[str] = None
+    action_request_id: Optional[str] = None
+    tool_call_args: Optional[dict[str, Any]] = None
     if action_taken:
         result["tool_called"] = "submit_wfh_request"
-        result["action_taken"] = True
+        employee_id = referenced_code or requester_code
+        date_match = ISO_DATE_RE.search(query)
+        requested_date = date_match.group(0) if date_match else today_iso()
+        tool_call_args = {"employee_id": employee_id, "date": requested_date}
+        try:
+            validate_tool_args(action_tool.get("input_schema") or {}, tool_call_args)
+            if action_requires_approval(action_tool):
+                emp = await db.employees.find_one(
+                    {"company_id": company_id, "employee_code": employee_id}, {"_id": 0}
+                )
+                action_request_id = new_id()
+                await db.action_requests.insert_one(
+                    {
+                        "id": action_request_id,
+                        "company_id": company_id,
+                        "employee_id": (emp or {}).get("id", employee_id),
+                        "employee_code": employee_id,
+                        "employee_name": (emp or {}).get("name"),
+                        "tool_name": action_tool["name"],
+                        "tool_call_args": tool_call_args,
+                        "run_id": run_id or "",
+                        "status": "pending",
+                        "requested_at": utcnow(),
+                        "resolved_at": None,
+                        "resolved_by": None,
+                        "resolution_note": None,
+                        "executed_result": None,
+                    }
+                )
+                approval_status = "pending_approval"
+                action_taken = False
+            else:
+                result["executed_result"] = await execute_action_tool(
+                    company_id=company_id, tool=action_tool, args=tool_call_args, actor=user_id
+                )
+                result["action_taken"] = True
+                approval_status = "executed"
+        except Exception as exc:
+            logger.exception("Action tool gate failed for company %s", company_id)
+            action_taken = False
+            result["action_taken"] = False
+            approval_status = "failed"
+            result["reasoning"] = f"{result['reasoning']} Tool gate failed: {str(exc)[:160]}".strip()
     await record(stage.done(
             "blocked" if flagged else "ok",
             (
                 f"Hallucinated employee_code {referenced_code} was never retrieved — action refused."
                 if flagged
-                else f"action_taken={action_taken} (decision={decision}, action_required={action_required}, code_verified={code_ok}, admin_enabled={action_allowed_by_admin})"
+                else f"action_taken={action_taken} status={approval_status or 'not_applicable'} (decision={decision}, action_required={action_required}, code_verified={code_ok}, admin_enabled={action_allowed_by_admin})"
             ),
             {
                 "action_taken": action_taken,
+                "status": approval_status or "not_applicable",
                 "tool_called": result["tool_called"],
+                "tool_call_args": tool_call_args,
+                "action_request_id": action_request_id,
                 "required_tool": "submit_wfh_request" if action_required else None,
                 "admin_enabled": action_allowed_by_admin,
                 "retrieved_employee_codes": sorted(retrieved_codes),
@@ -690,11 +743,23 @@ async def run_pipeline(
             "supported by the cited evidence, flag unsupported claims, and flag any disclosure of "
             "another employee's personal data (names, emails, salary). Return final_answer: the "
             "answer rewritten to remove anything unsupported, preserving the decision and tone.",
-            f"Query:\n{query}\n\nAnswer:\n{answer}\n\nCited evidence:\n"
+            f"Query:\n{query}\n\nAction execution state: {approval_status or 'not_applicable'}\n\nAnswer:\n{answer}\n\nCited evidence:\n"
             + ("\n".join(f"- ({c['source']}) {c['text']}" for c in kept) or "NONE"),
             VALIDATE_SCHEMA,
         )
         final_answer = str(validated.get("final_answer") or answer)
+        if approval_status == "pending_approval":
+            final_answer = (
+                "Your request meets the available policy checks and has been submitted for HR "
+                "approval. It has not been executed yet."
+            )
+        elif approval_status == "executed":
+            final_answer = "Your request meets the available policy checks and has been submitted."
+        elif approval_status == "failed":
+            final_answer = (
+                "Your request met the policy checks, but the action could not be submitted. "
+                "Please try again or contact HR."
+            )
 
         # Deterministic PII check — never trust the model's own rewrite. Any other
         # employee's name or email appearing in the answer is a hard block.

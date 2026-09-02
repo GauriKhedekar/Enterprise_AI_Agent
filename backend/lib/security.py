@@ -94,6 +94,12 @@ async def require_admin(user: CurrentUser = Depends(current_user)) -> CurrentUse
     return user
 
 
+async def require_hr_or_admin(user: CurrentUser = Depends(current_user)) -> CurrentUser:
+    if user.role not in {"hr", "company_admin"}:
+        raise HTTPException(status_code=403, detail="HR or company admin role required")
+    return user
+
+
 async def require_employee(user: CurrentUser = Depends(current_user)) -> CurrentUser:
     if user.role != "employee":
         raise HTTPException(status_code=403, detail="Employee role required")

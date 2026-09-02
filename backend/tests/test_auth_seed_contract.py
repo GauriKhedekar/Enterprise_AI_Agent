@@ -1,7 +1,5 @@
 """Auth contract for the documented demo credentials."""
-
 import pytest
-
 from lib.security import hash_password
 from models.schemas import new_id, utcnow
 
@@ -10,7 +8,6 @@ from models.schemas import new_id, utcnow
 async def test_demo_employee_credentials_are_valid(monkeypatch):
     import routers.auth as auth
     from motor.motor_asyncio import AsyncIOMotorClient
-
     import os
 
     client = AsyncIOMotorClient(os.environ.get("MONGO_URL", "mongodb://localhost:27017"))
@@ -19,7 +16,7 @@ async def test_demo_employee_credentials_are_valid(monkeypatch):
 
     company_id = new_id()
     user_id = new_id()
-    email = "priya.sharma@acmerobotics.com"
+    email = f"test-employee-{new_id()}@example.com"
 
     try:
         await test_db.companies.insert_one(
@@ -37,11 +34,20 @@ async def test_demo_employee_credentials_are_valid(monkeypatch):
                 "created_at": utcnow(),
             }
         )
-
         from fastapi import Response
+        from starlette.requests import Request
         from models.schemas import LoginRequest
 
-        me = await auth.login(LoginRequest(email=email, password="employee123"), Response())
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/auth/login",
+            "headers": [],
+            "client": ("testclient", 12345),
+        }
+        request = Request(scope)
+
+        me = await auth.login(LoginRequest(email=email, password="employee123"), Response(), request)
         assert me.email == email
         assert me.role == "employee"
         assert me.employee_code == "EMP-0001"

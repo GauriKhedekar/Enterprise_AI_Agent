@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from lib.dates import today_iso
 from lib.db import db
 from lib.mailer import invite_email_html, send_email
+from lib.mcp_tools import default_requires_approval
 from lib.pipeline import compare_backends
-from lib.security import CurrentUser, encrypt_secret, hash_password, last4, require_admin
+from lib.security import CurrentUser, encrypt_secret, hash_password, last4, require_admin, require_hr_or_admin
 from models.schemas import (
     ApiKeyCreate,
     ApiKeyPublic,
@@ -272,7 +273,15 @@ async def delete_api_key(key_id: str, user: CurrentUser = Depends(require_admin)
 
 # ---------------- MCP tools ----------------
 def _mcp_tool(doc: dict[str, Any]) -> McpToolPublic:
-    return McpToolPublic(**{**doc, "created_at": _aware(doc["created_at"])})
+    return McpToolPublic(
+        **{
+            **doc,
+            "requires_human_approval": default_requires_approval(
+                doc.get("kind", "read"), doc.get("requires_human_approval")
+            ),
+            "created_at": _aware(doc["created_at"]),
+        }
+    )
 
 
 @router.get("/mcp-tools", response_model=list[McpToolPublic])
@@ -298,6 +307,7 @@ async def create_mcp_tool(
         "server_url": payload.server_url.strip(),
         "input_schema": payload.input_schema,
         "enabled_for_employees": payload.enabled_for_employees,
+        "requires_human_approval": default_requires_approval(payload.kind, payload.requires_human_approval),
         "created_by": user.email,
         "created_at": utcnow(),
     }
@@ -319,6 +329,7 @@ async def update_mcp_tool(
         "server_url": payload.server_url.strip(),
         "input_schema": payload.input_schema,
         "enabled_for_employees": payload.enabled_for_employees,
+        "requires_human_approval": default_requires_approval(payload.kind, payload.requires_human_approval),
     }
     await db.mcp_tools.update_one({"id": tool_id, "company_id": user.company_id}, {"$set": updates})
     return _mcp_tool({**existing, **updates})
@@ -338,7 +349,7 @@ async def _login_emails(company_id: str) -> set[str]:
 
 
 @router.get("/employees", response_model=list[Employee])
-async def list_employees(user: CurrentUser = Depends(require_admin)) -> list[Employee]:
+async def list_employees(user: CurrentUser = Depends(require_hr_or_admin)) -> list[Employee]:
     docs = await db.employees.find({"company_id": user.company_id}, {"_id": 0}).to_list(1000)
     docs.sort(key=lambda d: d["employee_code"])
     emails = await _login_emails(user.company_id)

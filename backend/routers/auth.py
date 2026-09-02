@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from lib.db import db
+from lib.rate_limit import check_rate_limit
 from lib.security import (
     SESSION_COOKIE,
     CurrentUser,
@@ -32,7 +33,10 @@ COOKIE_MAX_AGE = int(timedelta(days=7).total_seconds())
 
 
 def _set_session(response: Response, user_id: str, company_id: str, role: str) -> None:
-    secure_cookie = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+    secure_cookie = (
+        os.environ.get("ENV", "development").lower() == "production"
+        or os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+    )
     response.set_cookie(
         key=SESSION_COOKIE,
         value=create_token(user_id, company_id, role),
@@ -76,7 +80,8 @@ async def signup(payload: SignupRequest, response: Response) -> Me:
 
 
 @router.post("/login", response_model=Me)
-async def login(payload: LoginRequest, response: Response) -> Me:
+async def login(payload: LoginRequest, response: Response, request: Request) -> Me:
+    await check_rate_limit(request, "auth-login", limit=10, window_seconds=60)
     doc = await db.users.find_one({"email": payload.email.lower()}, {"_id": 0})
     if not doc or not doc.get("password_hash") or not verify_password(payload.password, doc["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -94,7 +99,10 @@ async def login(payload: LoginRequest, response: Response) -> Me:
 
 @router.post("/logout")
 async def logout(response: Response) -> dict[str, bool]:
-    secure_cookie = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+    secure_cookie = (
+        os.environ.get("ENV", "development").lower() == "production"
+        or os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+    )
     response.delete_cookie(
         SESSION_COOKIE,
         path="/",

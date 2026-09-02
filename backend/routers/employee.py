@@ -12,9 +12,10 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.db import db
+from lib.mcp_tools import default_requires_approval
 from lib.pipeline import run_pipeline
 from lib.security import CurrentUser, require_employee
-from models.schemas import Employee, McpToolPublic, Policy, Run, RunCreate, new_id, utcnow
+from models.schemas import ActionRequestPublic, Employee, McpToolPublic, Policy, Run, RunCreate, new_id, utcnow
 from routers.company import _aware, _as_date, service_months
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,18 @@ async def visible_mcp_tools(user: CurrentUser = Depends(require_employee)) -> li
         {"company_id": user.company_id, "enabled_for_employees": True}, {"_id": 0}
     ).to_list(500)
     docs.sort(key=lambda d: (d["kind"], d["name"]))
-    return [McpToolPublic(**{**d, "created_at": _aware(d["created_at"])}) for d in docs]
+    return [
+        McpToolPublic(
+            **{
+                **d,
+                "requires_human_approval": default_requires_approval(
+                    d.get("kind", "read"), d.get("requires_human_approval")
+                ),
+                "created_at": _aware(d["created_at"]),
+            }
+        )
+        for d in docs
+    ]
 
 
 async def _execute(run_id: str, query: str, company_id: str, user_id: str, code: Optional[str]) -> None:
@@ -77,6 +89,7 @@ async def _execute(run_id: str, query: str, company_id: str, user_id: str, code:
             company_id=company_id,
             user_id=user_id,
             requester_code=code,
+            run_id=run_id,
             emit=emit,
         )
         outcome.pop("trace", None)  # already streamed in via emit
@@ -87,7 +100,7 @@ async def _execute(run_id: str, query: str, company_id: str, user_id: str, code:
             {"id": run_id},
             {
                 "$set": {
-                    "status": "complete",
+                    "status": "error",
                     "decision": "INSUFFICIENT_INFO",
                     "answer": "The compliance pipeline failed unexpectedly. Please try again.",
                     "reasoning": f"Unhandled pipeline error: {exc}",
@@ -135,6 +148,24 @@ async def my_runs(user: CurrentUser = Depends(require_employee)) -> list[Run]:
     ).to_list(200)
     docs.sort(key=lambda d: _aware(d["created_at"]), reverse=True)
     return [Run(**{**d, "created_at": _aware(d["created_at"])}) for d in docs]
+
+
+@router.get("/action-requests", response_model=list[ActionRequestPublic])
+async def my_action_requests(user: CurrentUser = Depends(require_employee)) -> list[ActionRequestPublic]:
+    docs = await db.action_requests.find(
+        {"company_id": user.company_id, "employee_code": user.employee_code}, {"_id": 0}
+    ).to_list(200)
+    docs.sort(key=lambda d: _aware(d["requested_at"]), reverse=True)
+    return [
+        ActionRequestPublic(
+            **{
+                **d,
+                "requested_at": _aware(d["requested_at"]),
+                "resolved_at": _aware(d.get("resolved_at")),
+            }
+        )
+        for d in docs
+    ]
 
 
 @router.get("/runs/{run_id}", response_model=Run)

@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 Provider = Literal["gemini", "qdrant", "pageindex"]
 Backend = Literal["qdrant", "pageindex"]
-Role = Literal["company_admin", "employee"]
+Role = Literal["company_admin", "hr", "employee"]
 McpToolKind = Literal["read", "action"]
 
 
@@ -85,6 +85,7 @@ class McpToolCreate(BaseModel):
     server_url: str = Field(min_length=4, max_length=300)
     input_schema: dict[str, Any] = Field(default_factory=dict)
     enabled_for_employees: bool = True
+    requires_human_approval: Optional[bool] = None
 
 
 class McpToolUpdate(BaseModel):
@@ -94,6 +95,7 @@ class McpToolUpdate(BaseModel):
     server_url: str = Field(min_length=4, max_length=300)
     input_schema: dict[str, Any] = Field(default_factory=dict)
     enabled_for_employees: bool = True
+    requires_human_approval: Optional[bool] = None
 
 
 class McpToolPublic(BaseModel):
@@ -106,8 +108,34 @@ class McpToolPublic(BaseModel):
     server_url: str
     input_schema: dict[str, Any] = Field(default_factory=dict)
     enabled_for_employees: bool
+    requires_human_approval: bool = False
     created_by: str
     created_at: datetime
+
+
+# ---------- action requests ----------
+ActionRequestStatus = Literal["pending", "approved", "rejected"]
+
+
+class ActionRequestPublic(BaseModel):
+    id: str
+    company_id: str
+    employee_id: str
+    employee_code: str
+    employee_name: Optional[str] = None
+    tool_name: str
+    tool_call_args: dict[str, Any] = Field(default_factory=dict)
+    run_id: str
+    status: ActionRequestStatus
+    requested_at: datetime
+    resolved_at: Optional[datetime] = None
+    resolved_by: Optional[str] = None
+    resolution_note: Optional[str] = None
+    executed_result: Optional[dict[str, Any]] = None
+
+
+class ActionRequestResolution(BaseModel):
+    resolution_note: Optional[str] = Field(default=None, max_length=1000)
 
 
 # ---------- employees ----------

@@ -1,7 +1,7 @@
 // Hand-written mirrors of backend/models/schemas.py — keep both sides in sync in one edit.
 export type Provider = "gemini" | "qdrant" | "pageindex";
 export type RetrievalBackend = "qdrant" | "pageindex";
-export type Role = "company_admin" | "employee";
+export type Role = "company_admin" | "hr" | "employee";
 export type McpToolKind = "read" | "action";
 
 export interface Me {
@@ -40,8 +40,28 @@ export interface McpToolPublic {
   server_url: string;
   input_schema: Record<string, unknown>;
   enabled_for_employees: boolean;
+  requires_human_approval: boolean;
   created_by: string;
   created_at: string;
+}
+
+export type ActionRequestStatus = "pending" | "approved" | "rejected";
+
+export interface ActionRequest {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  employee_code: string;
+  employee_name: string | null;
+  tool_name: string;
+  tool_call_args: Record<string, unknown>;
+  run_id: string;
+  status: ActionRequestStatus;
+  requested_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_note: string | null;
+  executed_result: Record<string, unknown> | null;
 }
 
 export interface Employee {

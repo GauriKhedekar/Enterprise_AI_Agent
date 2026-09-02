@@ -11,6 +11,7 @@ import CompanyPolicies from "@/pages/CompanyPolicies";
 import CompanyCompare from "@/pages/CompanyCompare";
 import CompanyRuns from "@/pages/CompanyRuns";
 import CompanyMcpTools from "@/pages/CompanyMcpTools";
+import HrApprovals from "@/pages/HrApprovals";
 import EmployeeHome from "@/pages/EmployeeHome";
 import EmployeeHistory from "@/pages/EmployeeHistory";
 
@@ -29,7 +30,7 @@ export default function App() {
         />
         <Route
           path="/company/employees"
-          element={<RequireRole role="company_admin">{(me) => <CompanyEmployees me={me} />}</RequireRole>}
+          element={<RequireRole role={["company_admin", "hr"]}>{(me) => <CompanyEmployees me={me} />}</RequireRole>}
         />
         <Route
           path="/company/policies"
@@ -50,6 +51,10 @@ export default function App() {
         <Route
           path="/company/mcp-tools"
           element={<RequireRole role="company_admin">{(me) => <CompanyMcpTools me={me} />}</RequireRole>}
+        />
+        <Route
+          path="/hr/approvals"
+          element={<RequireRole role={["company_admin", "hr"]}>{(me) => <HrApprovals me={me} />}</RequireRole>}
         />
 
         <Route
