@@ -9,7 +9,7 @@ clauses, reads the employee's HR record, decides, and shows its full reasoning t
 > Every answer is auditable. The employee sees *why* they got a decision; the admin sees
 > every stage, every retrieved clause and every latency for every query in their tenant.
 
-**Live demo (dev preview):** [enterprise-ai-agentt.vercel.app](enterprise-ai-agentt.vercel.app)
+**Live demo (dev preview):** <enterprise-ai-agentt.vercel.app>
 
 > This is a development preview. The app is built to run **fully independently of this
 > preview** on free-tier infrastructure — backend on Render, frontend on Vercel, database
