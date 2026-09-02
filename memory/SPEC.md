@@ -1,8 +1,10 @@
 # Adaptive Enterprise Agent — living spec
 
 Multi-tenant B2B compliance assistant. Companies onboard, admins manage employees,
-policies and AI-provider credentials; employees submit policy questions that are logged
-as `runs` (AI decisioning intentionally not built yet).
+policies and AI-provider credentials; employees submit policy questions that run through a
+9-stage grounded-decision agent pipeline and are logged as `runs` with full traces. Three
+roles: `company_admin`, `hr`, `employee`. State-changing agent actions (WFH requests) go
+through a human-approval workflow (`action_requests`).
 
 ## Stack
 FastAPI + motor/MongoDB backend (`/app/backend`), Vite + React 19 + Tailwind v4 +
@@ -17,7 +19,14 @@ cookie (`aea_session`).
   (Fernet, key derived from `APP_MASTER_KEY`), last_four, label, created_by, created_at,
   rotated_at. **Plaintext is never returned by any endpoint.**
 - `employees` — id, company_id, employee_code, name, email, department, joining_date,
-  service_months, employment_status
+  service_months, employment_status (active/probation), **employment_type
+  (`full_time`|`part_time`|`contract`, default full_time)** — employment_type is passed into
+  the decision-stage evidence so the WFH policy's "full-time employees" clause is genuinely
+  checkable
+- `action_requests` — id, company_id, employee_id, employee_code, employee_name, tool_name,
+  tool_call_args{employee_id,date}, run_id, status (`pending`|`approved`|`rejected`),
+  requested_at, resolved_at/by, resolution_note, executed_result. Also the ledger the
+  **weekly WFH cap** counts against.
 - `policies` — id, company_id, title, content (markdown), retrieval_backend, created_at
 - `runs` — id, company_id, user_id, employee_code, employee_name, query, status
   (`running`|`complete`), decision, reasoning, answer, cited_evidence[{text,source,
@@ -49,14 +58,37 @@ lookups by id, so guessing another tenant's UUID returns 404.
 `/employee/history`.
 
 ## Seed facts (`python seed.py`)
-- Acme Robotics: 5 employees EMP-0001..EMP-0005 with tenure 26/14/8/3/1 months (mix
-  above and below the 6-month WFH threshold); two policies — "Work From Home Policy"
-  (general 2-day allowance + 6-month minimum service clause, tagged **pageindex**) and
-  "Leave and Attendance Policy" (accrual + no-leave-on-probation clause, tagged
-  **qdrant**); real Gemini, Qdrant (with cluster URL) and PageIndex credentials.
+- Acme Robotics: 6 employees EMP-0001..EMP-0006. Five full-time with tenure 26/14/8/3/2
+  months (mix above and below the 6-month WFH threshold); **EMP-0006 Sofia Rossi is a
+  contract worker with 30 months tenure** — passes the service rule but fails the
+  "full-time employees" WFH condition, a demo case for employment_type. Two policies —
+  "Work From Home Policy" (2-day/week allowance + 6-month minimum service + full-time
+  clause, tagged **pageindex**) and "Leave and Attendance Policy" (tagged **qdrant**).
+  Provider credentials are seeded from env vars only if present.
 - Northwind Labs: 1 employee (NW-0001 Owen Blake), one "Northwind Travel Policy", and
   **no** API keys — so its pipeline halts at the credential stage by design.
 - Credentials in `memory/test_credentials.md`.
+
+## Weekly WFH cap (enforced across requests — Part 1a)
+`WEEKLY_WFH_CAP = 2` days per **calendar week** (Mon–Sun). For any action request the
+pipeline injects a "WFH request ledger" evidence item counting the requester's approved +
+pending WFH days that week (from `action_requests`, excluding the current run), so the
+decision model sees the cumulative count, not just the current request's text. The
+`tool_gate` stage then re-checks deterministically: if `used_days + this_request > 2`, it
+sets `weekly_cap_exceeded=true`, refuses the action, and **overrides the decision to DENY**
+(answer explains the cap). Helpers in `lib/pipeline.py`: `_week_bounds`,
+`_wfh_days_used_this_week`, `_wfh_cap_exceeded`. Tested in `tests/test_weekly_cap.py`.
+
+## Production hardening (Part 2)
+`server._validate_production_config()` runs in the lifespan and **prevents startup** when
+`ENV=production` and (a) `JWT_SECRET`/`APP_MASTER_KEY` are placeholder/weak, or (b)
+`CORS_ORIGINS` is `*` or empty (now a hard RuntimeError, not a warning). It also forces
+`COOKIE_SECURE=true`. Session cookies are `Secure` + `SameSite=None` + `HttpOnly` in
+production, `SameSite=Lax` insecure in dev (`routers/auth._set_session`). The global
+exception handler returns only `{"detail":"Internal server error"}` (no stack/detail leak).
+Rate limits: `/auth/login` 10/60s, HR approve/reject 30/60s (`lib/rate_limit`). A crashing
+background pipeline resolves the run to `status="error"` (`routers/employee._execute`).
+Verified in `tests/test_hardening.py`.
 
 ## The agent pipeline (`backend/lib/pipeline.py`)
 `POST /api/employee/runs` inserts a run with `status="running"` and returns immediately,

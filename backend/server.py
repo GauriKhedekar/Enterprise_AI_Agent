@@ -45,8 +45,12 @@ def _validate_production_config() -> None:
         value = os.environ.get(name, "").strip()
         if value in weak_values or value.startswith("change-me"):
             raise RuntimeError(f"{name} must be set to a strong non-placeholder value in production")
-    if "*" in [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",")]:
-        logger.warning("CORS_ORIGINS contains '*' while ENV=production; set explicit HTTPS origins.")
+    origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
+    if not origins or "*" in origins:
+        raise RuntimeError(
+            "CORS_ORIGINS must be an explicit list of HTTPS origins in production "
+            "(a wildcard '*' or empty value is not allowed)."
+        )
     os.environ["COOKIE_SECURE"] = "true"
 
 

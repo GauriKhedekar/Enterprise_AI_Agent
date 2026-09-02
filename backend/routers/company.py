@@ -73,6 +73,7 @@ def _employee(doc: dict[str, Any], login_emails: set[str]) -> Employee:
         joining_date=joining,
         service_months=service_months(joining),
         employment_status=doc.get("employment_status", "active"),
+        employment_type=doc.get("employment_type", "full_time"),
         has_login=bool(doc.get("email")) and doc.get("email", "").lower() in login_emails,
     )
 
@@ -370,6 +371,7 @@ async def create_employee(payload: EmployeeCreate, user: CurrentUser = Depends(r
         "joining_date": joining.isoformat(),
         "service_months": service_months(joining),
         "employment_status": payload.employment_status.strip() or "active",
+        "employment_type": payload.employment_type,
         "created_at": utcnow(),
     }
     await db.employees.insert_one(dict(doc))
@@ -390,6 +392,7 @@ async def update_employee(
         "joining_date": joining.isoformat(),
         "service_months": service_months(joining),
         "employment_status": payload.employment_status.strip() or "active",
+        "employment_type": payload.employment_type,
     }
     await db.employees.update_one({"id": employee_id, "company_id": user.company_id}, {"$set": updates})
     return _employee({**existing, **updates}, await _login_emails(user.company_id))

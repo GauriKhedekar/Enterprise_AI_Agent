@@ -9,7 +9,7 @@ clauses, reads the employee's HR record, decides, and shows its full reasoning t
 > Every answer is auditable. The employee sees *why* they got a decision; the admin sees
 > every stage, every retrieved clause and every latency for every query in their tenant.
 
-**Live demo:** https://enterprise-agent-3.preview.emergentagent.com
+**Live demo:** https://governed-hr-flow.preview.emergentagent.com
 
 | Role | Email | Password |
 |---|---|---|

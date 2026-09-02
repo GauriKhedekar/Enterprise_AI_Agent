@@ -1,7 +1,7 @@
 # Screenshot walkthrough
 
 All images captured against the live deployment at
-`https://enterprise-agent-3.preview.emergentagent.com` (1440×900, dark theme).
+`https://governed-hr-flow.preview.emergentagent.com` (1440×900, dark theme).
 
 ## 1. Authentication
 

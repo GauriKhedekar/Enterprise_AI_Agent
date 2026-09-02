@@ -3,6 +3,7 @@ export type Provider = "gemini" | "qdrant" | "pageindex";
 export type RetrievalBackend = "qdrant" | "pageindex";
 export type Role = "company_admin" | "hr" | "employee";
 export type McpToolKind = "read" | "action";
+export type EmploymentType = "full_time" | "part_time" | "contract";
 
 export interface Me {
   id: string;
@@ -74,6 +75,7 @@ export interface Employee {
   joining_date: string;
   service_months: number;
   employment_status: string;
+  employment_type: EmploymentType;
   has_login: boolean;
 }
 
@@ -219,4 +221,10 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
 export const BACKEND_LABELS: Record<RetrievalBackend, string> = {
   qdrant: "Qdrant",
   pageindex: "PageIndex",
+};
+
+export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+  full_time: "Full-time",
+  part_time: "Part-time",
+  contract: "Contract",
 };

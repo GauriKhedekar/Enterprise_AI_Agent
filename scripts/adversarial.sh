@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Adversarial guardrail probes. Prints the full stage trace for each case.
 set -u
-B=https://enterprise-agent-3.preview.emergentagent.com
+B=https://governed-hr-flow.preview.emergentagent.com
 EMAIL="$1"; PASS="$2"; Q="$3"
 J=$(mktemp)
 curl -s -c "$J" -o /dev/null -X POST $B/api/auth/login -H 'Content-Type: application/json' \

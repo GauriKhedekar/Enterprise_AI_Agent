@@ -188,7 +188,7 @@ clauses, reads the employee's HR record, decides, and shows its full reasoning t
 > Every answer is auditable. The employee sees *why* they got a decision; the admin sees
 > every stage, every retrieved clause and every latency for every query in their tenant.
 
-**Live demo:** https://enterprise-agent-3.preview.emergentagent.com
+**Live demo:** https://governed-hr-flow.preview.emergentagent.com
 
 | Role | Email | Password |
 |---|---|---|
@@ -6603,7 +6603,7 @@ decision accuracy per backend — reusing the existing comparison endpoint as th
 # Screenshot walkthrough
 
 All images captured against the live deployment at
-`https://enterprise-agent-3.preview.emergentagent.com` (1440×900, dark theme).
+`https://governed-hr-flow.preview.emergentagent.com` (1440×900, dark theme).
 
 ## 1. Authentication
 
@@ -19949,7 +19949,7 @@ quota-limited key. Stats: `agreement_rate`, `avg_latency_{qdrant,pageindex}_ms`,
 #!/usr/bin/env bash
 # Adversarial guardrail probes. Prints the full stage trace for each case.
 set -u
-B=https://enterprise-agent-3.preview.emergentagent.com
+B=https://governed-hr-flow.preview.emergentagent.com
 EMAIL="$1"; PASS="$2"; Q="$3"
 J=$(mktemp)
 curl -s -c "$J" -o /dev/null -X POST $B/api/auth/login -H 'Content-Type: application/json' \
@@ -19995,7 +19995,7 @@ PY
 #!/usr/bin/env bash
 # Submit a query as an employee, poll until the background pipeline completes, print the trace.
 set -u
-B=https://enterprise-agent-3.preview.emergentagent.com
+B=https://governed-hr-flow.preview.emergentagent.com
 EMAIL="$1"; PASS="$2"; Q="$3"
 J=$(mktemp)
 curl -s -c "$J" -o /dev/null -X POST $B/api/auth/login -H 'Content-Type: application/json' \

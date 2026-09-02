@@ -40,11 +40,14 @@ OTHER = {
 }
 
 EMPLOYEES = [
-    ("EMP-0001", "Priya Sharma", DEMO["employee_email"], "Engineering", 26, "active"),
-    ("EMP-0002", "Daniel Okafor", "daniel.okafor@acmerobotics.com", "Engineering", 14, "active"),
-    ("EMP-0003", "Mei Tanaka", "mei.tanaka@acmerobotics.com", "Finance", 8, "active"),
-    ("EMP-0004", "Luis Ferreira", "luis.ferreira@acmerobotics.com", "Customer Success", 4, "probation"),
-    ("EMP-0005", "Hannah Weber", "hannah.weber@acmerobotics.com", "People Ops", 2, "active"),
+    ("EMP-0001", "Priya Sharma", DEMO["employee_email"], "Engineering", 26, "active", "full_time"),
+    ("EMP-0002", "Daniel Okafor", "daniel.okafor@acmerobotics.com", "Engineering", 14, "active", "full_time"),
+    ("EMP-0003", "Mei Tanaka", "mei.tanaka@acmerobotics.com", "Finance", 8, "active", "full_time"),
+    ("EMP-0004", "Luis Ferreira", "luis.ferreira@acmerobotics.com", "Customer Success", 4, "probation", "full_time"),
+    ("EMP-0005", "Hannah Weber", "hannah.weber@acmerobotics.com", "People Ops", 2, "active", "full_time"),
+    # Long tenure (passes the 6-month rule) but a contract worker, not full-time — a useful
+    # demo case for the WFH policy's "full-time employees" eligibility condition.
+    ("EMP-0006", "Sofia Rossi", "sofia.rossi@acmerobotics.com", "Design", 30, "active", "contract"),
 ]
 
 def _cred(env_name: str) -> str:
@@ -226,7 +229,7 @@ async def main() -> None:
     await upsert_user(acme, DEMO["employee_email"], "employee", DEMO["employee_password"], "EMP-0001")
     await upsert_user(acme, DEMO["hannah_email"], "employee", DEMO["hannah_password"], "EMP-0005")
 
-    for code, name, email, dept, months, status in EMPLOYEES:
+    for code, name, email, dept, months, status, emp_type in EMPLOYEES:
         joining = months_ago(months)
         payload = {
             "company_id": acme,
@@ -237,6 +240,7 @@ async def main() -> None:
             "joining_date": joining,
             "service_months": months,
             "employment_status": status,
+            "employment_type": emp_type,
         }
         existing = await db.employees.find_one({"company_id": acme, "employee_code": code}, {"_id": 0})
         if existing:
@@ -321,6 +325,7 @@ async def main() -> None:
                 "joining_date": months_ago(19),
                 "service_months": 19,
                 "employment_status": "active",
+                "employment_type": "full_time",
                 "created_at": utcnow(),
             }
         )

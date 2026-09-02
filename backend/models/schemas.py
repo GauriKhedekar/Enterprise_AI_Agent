@@ -9,6 +9,7 @@ Provider = Literal["gemini", "qdrant", "pageindex"]
 Backend = Literal["qdrant", "pageindex"]
 Role = Literal["company_admin", "hr", "employee"]
 McpToolKind = Literal["read", "action"]
+EmploymentType = Literal["full_time", "part_time", "contract"]
 
 
 def new_id() -> str:
@@ -145,6 +146,7 @@ class EmployeeCreate(BaseModel):
     department: str = Field(min_length=1, max_length=80)
     joining_date: date
     employment_status: str = Field(default="active", max_length=40)
+    employment_type: EmploymentType = "full_time"
 
 
 class EmployeeUpdate(BaseModel):
@@ -152,6 +154,7 @@ class EmployeeUpdate(BaseModel):
     department: str = Field(min_length=1, max_length=80)
     joining_date: date
     employment_status: str = Field(max_length=40)
+    employment_type: EmploymentType = "full_time"
 
 
 class Employee(BaseModel):
@@ -164,6 +167,7 @@ class Employee(BaseModel):
     joining_date: date
     service_months: int
     employment_status: str
+    employment_type: EmploymentType = "full_time"
     has_login: bool = False
 
 

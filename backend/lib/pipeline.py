@@ -6,6 +6,7 @@ decrypted API key. All data access is scoped to the caller's company_id.
 import logging
 import re
 import time
+from datetime import date, timedelta
 from typing import Any, Optional
 
 from lib import gemini, retrieval
@@ -20,6 +21,11 @@ logger = logging.getLogger(__name__)
 DECISIONS = {"ALLOW", "DENY", "NOT_ELIGIBLE", "INSUFFICIENT_INFO"}
 CODE_RE = re.compile(r"\b[A-Z]{2,4}-\d{3,5}\b")
 ISO_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+
+# Maximum work-from-home days an employee may hold (approved or pending) per calendar week.
+# Enforced both as evidence to the decision model and as a hard code check in the tool gate.
+WEEKLY_WFH_CAP = 2
+WFH_ACTION_TOOL = "submit_wfh_request"
 
 GUARDRAIL_SCHEMA = {
     "type": "object",
@@ -157,6 +163,65 @@ def validate_citations(
     return kept, stripped
 
 
+def _week_bounds(d: date) -> tuple[date, date]:
+    """Monday..Sunday calendar-week bounds for a date (Monday is day 0)."""
+    monday = d - timedelta(days=d.weekday())
+    return monday, monday + timedelta(days=6)
+
+
+def _parse_request_date(query: str) -> date:
+    """The WFH date the request is for: an explicit ISO date in the text, else today."""
+    match = ISO_DATE_RE.search(query)
+    if match:
+        try:
+            return date.fromisoformat(match.group(0))
+        except ValueError:
+            pass
+    return date.fromisoformat(today_iso())
+
+
+async def _wfh_days_used_this_week(
+    company_id: str, employee_code: str, target_date: date, exclude_run_id: Optional[str] = None
+) -> list[str]:
+    """Distinct WFH dates already approved or pending for this employee in target_date's week.
+
+    Counts the persisted `action_requests` ledger — approved *and* pending both consume the
+    weekly allowance, so two in-flight requests cannot both slip through. The current run is
+    excluded so re-evaluating the same request never counts itself.
+    """
+    if not employee_code:
+        return []
+    monday, sunday = _week_bounds(target_date)
+    docs = await db.action_requests.find(
+        {
+            "company_id": company_id,
+            "employee_code": employee_code,
+            "tool_name": WFH_ACTION_TOOL,
+            "status": {"$in": ["pending", "approved"]},
+        },
+        {"_id": 0, "run_id": 1, "tool_call_args": 1},
+    ).to_list(500)
+    used: set[str] = set()
+    for doc in docs:
+        if exclude_run_id and doc.get("run_id") == exclude_run_id:
+            continue
+        raw = str((doc.get("tool_call_args") or {}).get("date") or "")[:10]
+        try:
+            booked = date.fromisoformat(raw)
+        except ValueError:
+            continue
+        if monday <= booked <= sunday:
+            used.add(booked.isoformat())
+    return sorted(used)
+
+
+def _wfh_cap_exceeded(days_used_this_week: list[str], requested_date: str, cap: int = WEEKLY_WFH_CAP) -> bool:
+    """True when adding requested_date would push this week's WFH total past the cap."""
+    projected = set(days_used_this_week)
+    projected.add(requested_date)
+    return len(projected) > cap
+
+
 async def _company_gemini_key(company_id: str) -> Optional[str]:
     doc = await db.api_keys.find_one({"company_id": company_id, "provider": "gemini"}, {"_id": 0})
     if not doc:
@@ -186,6 +251,7 @@ def _employee_facts(emp: dict[str, Any], months: int) -> dict[str, Any]:
         "department": emp["department"],
         "service_months": months,
         "employment_status": emp.get("employment_status", "active"),
+        "employment_type": emp.get("employment_type", "full_time"),
         "joining_date": str(emp.get("joining_date", ""))[:10],
     }
 
@@ -566,6 +632,7 @@ async def run_pipeline(
                     "department": facts["department"],
                     "service_months": facts["service_months"],
                     "employment_status": facts["employment_status"],
+                    "employment_type": facts["employment_type"],
                 }
             retrieved_codes.add(facts["employee_code"])
             evidence_pool.append(
@@ -582,6 +649,37 @@ async def run_pipeline(
                     + (" (third-party query — minimised projection)" if cross_request else ""),
                     {"record": facts, "third_party": cross_request},
                 ))
+
+    # ---- WFH weekly-cap ledger (plain code; injected as evidence for the decision) ----
+    # For any action request we surface how many WFH days the requester already holds this
+    # calendar week, so the decision model can reason about the cumulative cap rather than
+    # judging the current request in isolation. The tool gate re-checks this deterministically.
+    wfh_requested_date: Optional[date] = None
+    wfh_week_used: list[str] = []
+    if action_required and requester_code:
+        wfh_requested_date = _parse_request_date(query)
+        wfh_week_used = await _wfh_days_used_this_week(
+            company_id, requester_code, wfh_requested_date, exclude_run_id=run_id
+        )
+        monday, sunday = _week_bounds(wfh_requested_date)
+        remaining = max(WEEKLY_WFH_CAP - len(wfh_week_used), 0)
+        evidence_pool.append(
+            {
+                "source": "WFH request ledger",
+                "text": (
+                    f"The work-from-home allowance is capped at {WEEKLY_WFH_CAP} days per calendar "
+                    f"week (week of {monday.isoformat()} to {sunday.isoformat()}). Requester "
+                    f"{requester_code} already has {len(wfh_week_used)} approved or pending WFH "
+                    f"day(s) this week"
+                    + (f" ({', '.join(wfh_week_used)})" if wfh_week_used else "")
+                    + f". The current request is for {wfh_requested_date.isoformat()}. Remaining "
+                    f"WFH allowance this week before this request: {remaining} day(s). If none "
+                    "remain, the request exceeds the weekly cap and must not be allowed."
+                ),
+                "score": None,
+                "backend": "ledger",
+            }
+        )
 
     # ---- 5. evidence combiner ----
     stage = Stage("evidence_combiner")
@@ -663,15 +761,33 @@ async def run_pipeline(
     )
     action_allowed_by_admin = bool(action_tool)
     action_taken = decision == "ALLOW" and action_required and code_ok and action_allowed_by_admin
+    weekly_cap_exceeded = False
+    if (
+        action_taken
+        and action_tool
+        and action_tool.get("name") == WFH_ACTION_TOOL
+        and wfh_requested_date is not None
+        and _wfh_cap_exceeded(wfh_week_used, wfh_requested_date.isoformat())
+    ):
+        # Cumulative cap breach the decision model may have missed: refuse in plain code.
+        weekly_cap_exceeded = True
+        action_taken = False
+        decision = "DENY"
+        result["reasoning"] = (
+            f"{result['reasoning']} Weekly WFH cap of {WEEKLY_WFH_CAP} day(s) already reached for "
+            f"the week of {wfh_requested_date.isoformat()} "
+            f"({', '.join(wfh_week_used) or 'none recorded'}); request refused by the tool gate."
+        ).strip()
     flagged = bool(referenced_code) and referenced_code not in retrieved_codes
     approval_status: Optional[str] = None
     action_request_id: Optional[str] = None
     tool_call_args: Optional[dict[str, Any]] = None
     if action_taken:
-        result["tool_called"] = "submit_wfh_request"
+        result["tool_called"] = WFH_ACTION_TOOL
         employee_id = referenced_code or requester_code
-        date_match = ISO_DATE_RE.search(query)
-        requested_date = date_match.group(0) if date_match else today_iso()
+        requested_date = (
+            wfh_requested_date.isoformat() if wfh_requested_date is not None else today_iso()
+        )
         tool_call_args = {"employee_id": employee_id, "date": requested_date}
         try:
             validate_tool_args(action_tool.get("input_schema") or {}, tool_call_args)
@@ -712,11 +828,16 @@ async def run_pipeline(
             result["action_taken"] = False
             approval_status = "failed"
             result["reasoning"] = f"{result['reasoning']} Tool gate failed: {str(exc)[:160]}".strip()
+    if weekly_cap_exceeded:
+        approval_status = "weekly_cap_exceeded"
     await record(stage.done(
-            "blocked" if flagged else "ok",
+            "blocked" if (flagged or weekly_cap_exceeded) else "ok",
             (
                 f"Hallucinated employee_code {referenced_code} was never retrieved — action refused."
                 if flagged
+                else f"Weekly WFH cap of {WEEKLY_WFH_CAP} day(s) reached this week "
+                f"({', '.join(wfh_week_used) or 'none'}) — action refused, decision overridden to DENY."
+                if weekly_cap_exceeded
                 else f"action_taken={action_taken} status={approval_status or 'not_applicable'} (decision={decision}, action_required={action_required}, code_verified={code_ok}, admin_enabled={action_allowed_by_admin})"
             ),
             {
@@ -730,6 +851,9 @@ async def run_pipeline(
                 "retrieved_employee_codes": sorted(retrieved_codes),
                 "referenced_employee_code": referenced_code or None,
                 "hallucinated_code_flagged": flagged,
+                "weekly_cap_exceeded": weekly_cap_exceeded,
+                "wfh_days_used_this_week": wfh_week_used,
+                "weekly_wfh_cap": WEEKLY_WFH_CAP,
             },
         ))
 
@@ -759,6 +883,14 @@ async def run_pipeline(
             final_answer = (
                 "Your request met the policy checks, but the action could not be submitted. "
                 "Please try again or contact HR."
+            )
+        elif approval_status == "weekly_cap_exceeded":
+            final_answer = (
+                f"You've already reached the weekly work-from-home limit of {WEEKLY_WFH_CAP} days "
+                "for that week"
+                + (f" ({', '.join(wfh_week_used)} already booked)" if wfh_week_used else "")
+                + ", so this additional request can't be approved. Please choose a day in a "
+                "different week or contact HR."
             )
 
         # Deterministic PII check — never trust the model's own rewrite. Any other

@@ -16,8 +16,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
-import type { Employee, InviteResult, Me } from "@/lib/types";
+import type { Employee, EmploymentType, InviteResult, Me } from "@/lib/types";
+import { EMPLOYMENT_TYPE_LABELS } from "@/lib/types";
 
 const KEY = ["company", "employees"];
 
@@ -32,6 +40,7 @@ interface FormState {
   department: string;
   joining_date: string;
   employment_status: string;
+  employment_type: EmploymentType;
 }
 
 const BLANK: FormState = {
@@ -40,6 +49,7 @@ const BLANK: FormState = {
   department: "",
   joining_date: "",
   employment_status: "active",
+  employment_type: "full_time",
 };
 
 export default function CompanyEmployees({ me }: { me: Me }) {
@@ -75,6 +85,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
       department: emp.department,
       joining_date: emp.joining_date.slice(0, 10),
       employment_status: emp.employment_status,
+      employment_type: emp.employment_type,
     });
     setFormOpen(true);
   };
@@ -87,6 +98,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
           department: form.department,
           joining_date: form.joining_date,
           employment_status: form.employment_status,
+          employment_type: form.employment_type,
         });
       }
       return apiPost<Employee>("/company/employees", {
@@ -95,6 +107,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
         department: form.department,
         joining_date: form.joining_date,
         employment_status: form.employment_status,
+        employment_type: form.employment_type,
       });
     },
     onSuccess: () => {
@@ -162,6 +175,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
                 <th className="px-4 py-3">Department</th>
                 <th className="px-4 py-3">Joined</th>
                 <th className="px-4 py-3">Tenure</th>
+                <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Status</th>
                 {canManage ? <th className="px-4 py-3 text-right">Actions</th> : null}
               </tr>
@@ -198,6 +212,17 @@ export default function CompanyEmployees({ me }: { me: Me }) {
                     <span className={emp.service_months >= 6 ? "text-[#34d399]" : "text-[#fbbf24]"}>
                       {emp.service_months} mo
                     </span>
+                  </td>
+                  <td
+                    className="px-4 py-3 text-xs"
+                    data-testid={`employee-type-${emp.employee_code}`}
+                  >
+                    <Badge
+                      variant="outline"
+                      className="border-[#2c3348] bg-[#94a3b81a] font-mono text-[11px] text-[#cbd5e1]"
+                    >
+                      {EMPLOYMENT_TYPE_LABELS[emp.employment_type]}
+                    </Badge>
                   </td>
                   <td className="px-4 py-3 text-xs text-zinc-300">{emp.employment_status}</td>
                   {canManage ? (
@@ -310,6 +335,32 @@ export default function CompanyEmployees({ me }: { me: Me }) {
                   data-testid="employee-status-input"
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employment-type">Employment type</Label>
+              <Select
+                value={form.employment_type}
+                onValueChange={(value: string) =>
+                  setForm({ ...form, employment_type: value as EmploymentType })
+                }
+              >
+                <SelectTrigger id="employment-type" data-testid="employee-type-select">
+                  <SelectValue>
+                    {(v) => EMPLOYMENT_TYPE_LABELS[v as EmploymentType]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full_time" data-testid="employee-type-option-full_time">
+                    Full-time
+                  </SelectItem>
+                  <SelectItem value="part_time" data-testid="employee-type-option-part_time">
+                    Part-time
+                  </SelectItem>
+                  <SelectItem value="contract" data-testid="employee-type-option-contract">
+                    Contract
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <DialogFooter>
               <Button type="submit" disabled={save.isPending} data-testid="employee-submit-button">
