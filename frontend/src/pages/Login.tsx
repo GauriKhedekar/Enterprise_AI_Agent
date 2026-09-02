@@ -102,19 +102,6 @@ export default function Login() {
           Create a workspace
         </Link>
       </p>
-
-      <div className="mt-8 rounded-lg border border-[#1e2433] bg-[#11141d] p-4">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Demo logins</p>
-        <p className="mt-2 font-mono text-xs text-zinc-300">
-          gauri.khedekar.entc.2023@vpkbiet.org / admin123
-        </p>
-        <p className="mt-1 font-mono text-xs text-zinc-300">
-          hr@acmerobotics.com / hr12345
-        </p>
-        <p className="mt-1 font-mono text-xs text-zinc-300">
-          priya.sharma@acmerobotics.com / employee123
-        </p>
-      </div>
     </AuthLayout>
   );
 }
