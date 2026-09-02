@@ -61,6 +61,15 @@ function RequestRow({
             <Badge variant="outline" className="border-[#2c3348] bg-[#94a3b81a] font-mono text-[11px] text-[#cbd5e1]">
               {request.tool_name}
             </Badge>
+            {request.stage === "manager" ? (
+              <Badge
+                variant="outline"
+                className="border-[#3d3011] bg-[#f59e0b1f] font-mono text-[11px] text-[#fbbf24]"
+                data-testid={`action-request-stage-${request.id}`}
+              >
+                manager step
+              </Badge>
+            ) : null}
           </div>
           <p className="mt-2 font-mono text-xs text-zinc-500">
             requested {new Date(request.requested_at).toLocaleString()} · run {request.run_id || "unlinked"}
@@ -126,8 +135,12 @@ export default function HrApprovals({ me }: { me: Me }) {
   return (
     <AppShell
       me={me}
-      title="HR Approvals"
-      subtitle="Review employee action requests before state-changing tools execute."
+      title={me.role === "manager" ? "Team Approvals" : "HR Approvals"}
+      subtitle={
+        me.role === "manager"
+          ? "Review action requests from your direct reports. Approving forwards them to HR for final sign-off."
+          : "Review employee action requests before state-changing tools execute."
+      }
     >
       <div className="mb-5 flex gap-2" data-testid="hr-approval-tabs">
         <Button variant={tab === "pending" ? "default" : "outline"} onClick={() => setTab("pending")}>

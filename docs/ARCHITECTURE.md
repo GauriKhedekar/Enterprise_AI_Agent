@@ -34,11 +34,19 @@ MongoDB, six collections. Every document except `companies` carries `company_id`
 | Collection | Fields |
 |---|---|
 | `companies` | `id`, `name`, `created_at` |
-| `users` | `id`, `company_id`, `email` (unique), `role`, `employee_code`, `password_hash`, `invite_token` |
+| `users` | `id`, `company_id`, `email` (unique), `role` (`company_admin`\|`hr`\|`manager`\|`employee`), `employee_code`, `password_hash`, `invite_token` |
 | `api_keys` | `id`, `company_id`, `provider`, `encrypted_value`, `last_four`, `endpoint`, `label`, `created_by`, `created_at`, `rotated_at` |
-| `employees` | `id`, `company_id`, `employee_code`, `name`, `email`, `department`, `joining_date`, `service_months`, `employment_status`, `employment_type` (`full_time`\|`part_time`\|`contract`) |
+| `employees` | `id`, `company_id`, `employee_code`, `name`, `email`, `department`, `joining_date`, `service_months`, `employment_status`, `employment_type` (`full_time`\|`part_time`\|`contract`), `manager_employee_code` (nullable) |
 | `policies` | `id`, `company_id`, `title`, `content` (markdown), `retrieval_backend`, `created_at` |
+| `action_requests` | `id`, `company_id`, `employee_code`, `tool_name`, `tool_call_args`, `run_id`, `status` (`pending`\|`approved`\|`rejected`), `stage` (`manager`\|`hr`), `manager_employee_code`, `requested_at`, `resolved_at`/`by`, `resolution_note`, `executed_result` |
 | `runs` | `id`, `company_id`, `user_id`, `employee_code`, `query`, `status`, `decision`, `reasoning`, `answer`, `cited_evidence[]`, `tool_called`, `action_taken`, the three classifier booleans, `trace[]`, `latency_ms`, `created_at` |
+
+**Approval routing.** An `action_requests` item starts at `stage="manager"` when the
+requesting employee has a `manager_employee_code` and a matching manager login exists, else
+`stage="hr"`. Manager approval advances it to `stage="hr"` (still pending); HR approval
+executes the tool. Queue visibility is scoped by role (`routers/hr._queue_query` /
+`_authorize`): managers see only their reports' manager-stage items, HR the hr-stage,
+`company_admin` all stages.
 
 **Why Mongo?** `runs.trace[].output` is a different shape for every stage — the classifier
 emits three booleans, retrieval emits scored chunks, the tool gate emits verification

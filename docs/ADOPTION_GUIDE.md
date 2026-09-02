@@ -149,6 +149,13 @@ subject to People Ops confirmation.
 > employee's `employment_type`, so a long-tenure contractor is correctly found ineligible on
 > that clause. Write these conditions explicitly and they become genuinely checkable.
 
+**Who approves.** State-changing actions (like a WFH request) wait for a human. From
+**Team & HR** you invite **HR reviewers** and **managers**. If an employee has a manager set
+(their `manager_employee_code`) and that manager has a login, the request goes to the
+**manager first**, then to **HR** for final sign-off — a manager-then-HR chain. Employees
+with no manager go straight to HR. Turn on real email notifications by setting
+`RESEND_API_KEY`; without it, notifications are logged instead of sent.
+
 **Which retrieval backend to tag?** Short, well-structured documents like the above →
 **PageIndex** (more precise, cites clause paths cleanly). Large or messy document sets →
 **Qdrant**. Unsure? Tag a few each way and use the **Backend Compare** page to see which

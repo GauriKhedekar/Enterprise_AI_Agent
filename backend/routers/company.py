@@ -76,6 +76,7 @@ def _employee(doc: dict[str, Any], login_emails: set[str]) -> Employee:
         service_months=service_months(joining),
         employment_status=doc.get("employment_status", "active"),
         employment_type=doc.get("employment_type", "full_time"),
+        manager_employee_code=doc.get("manager_employee_code"),
         has_login=bool(doc.get("email")) and doc.get("email", "").lower() in login_emails,
     )
 
@@ -374,6 +375,7 @@ async def create_employee(payload: EmployeeCreate, user: CurrentUser = Depends(r
         "service_months": service_months(joining),
         "employment_status": payload.employment_status.strip() or "active",
         "employment_type": payload.employment_type,
+        "manager_employee_code": (payload.manager_employee_code or "").strip() or None,
         "created_at": utcnow(),
     }
     await db.employees.insert_one(dict(doc))
@@ -395,6 +397,7 @@ async def update_employee(
         "service_months": service_months(joining),
         "employment_status": payload.employment_status.strip() or "active",
         "employment_type": payload.employment_type,
+        "manager_employee_code": (payload.manager_employee_code or "").strip() or None,
     }
     await db.employees.update_one({"id": employee_id, "company_id": user.company_id}, {"$set": updates})
     return _employee({**existing, **updates}, await _login_emails(user.company_id))
@@ -463,7 +466,7 @@ async def invite_employee(
 @router.get("/team", response_model=list[TeamMember])
 async def list_team(user: CurrentUser = Depends(require_admin)) -> list[TeamMember]:
     docs = await db.users.find(
-        {"company_id": user.company_id, "role": {"$in": ["company_admin", "hr"]}}, {"_id": 0}
+        {"company_id": user.company_id, "role": {"$in": ["company_admin", "hr", "manager"]}}, {"_id": 0}
     ).to_list(200)
     docs.sort(key=lambda d: (d["role"] != "company_admin", d["email"]))
     return [
@@ -482,8 +485,15 @@ async def list_team(user: CurrentUser = Depends(require_admin)) -> list[TeamMemb
 async def invite_hr(
     payload: TeamInviteRequest, request: Request, user: CurrentUser = Depends(require_admin)
 ) -> InviteResult:
-    """Invite (or re-invite) an HR user by email. Reuses the single-use invite/accept flow."""
+    """Invite (or re-invite) an HR reviewer or a manager by email. Reuses the single-use
+    invite/accept flow. Managers are linked to their own employee_code so the approval queue
+    can scope requests to their direct reports."""
     email = payload.email.lower()
+    role = payload.role
+    manager_code = (payload.employee_code or "").strip() or None
+    if role == "manager" and not manager_code:
+        raise HTTPException(status_code=422, detail="A manager invite needs the manager's employee code")
+
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing and existing["company_id"] != user.company_id:
         raise HTTPException(status_code=409, detail="This email already belongs to another company")
@@ -491,32 +501,24 @@ async def invite_hr(
         raise HTTPException(status_code=409, detail="This user is already a company admin")
 
     token = new_invite_token()
+    fields = {
+        "role": role,
+        "invite_token": token,
+        "password_hash": None,
+        "employee_code": manager_code if role == "manager" else None,
+    }
     if existing:
-        await db.users.update_one(
-            {"id": existing["id"]},
-            {"$set": {"role": "hr", "invite_token": token, "password_hash": None, "employee_code": None}},
-        )
+        await db.users.update_one({"id": existing["id"]}, {"$set": fields})
     else:
         await db.users.insert_one(
-            {
-                "id": new_id(),
-                "company_id": user.company_id,
-                "email": email,
-                "role": "hr",
-                "employee_code": None,
-                "password_hash": None,
-                "invite_token": token,
-                "created_at": utcnow(),
-            }
+            {"id": new_id(), "company_id": user.company_id, "email": email, "created_at": utcnow(), **fields}
         )
 
     company = await db.companies.find_one({"id": user.company_id}, {"_id": 0})
+    company_name = (company or {}).get("name", "your company")
     invite_url = f"{app_base_url(request)}/invite/{token}"
-    sent = await send_email(
-        email,
-        f"Your {(company or {}).get('name', 'workspace')} HR account",
-        hr_invite_email_html((company or {}).get("name", "your company"), invite_url),
-    )
+    subject = f"Your {(company or {}).get('name', 'workspace')} {'manager' if role == 'manager' else 'HR'} account"
+    sent = await send_email(email, subject, hr_invite_email_html(company_name, invite_url, role))
     return InviteResult(email=email, token=token, invite_url=invite_url, email_sent=sent)
 
 
@@ -525,8 +527,8 @@ async def revoke_team_member(user_id: str, user: CurrentUser = Depends(require_a
     target = await db.users.find_one({"id": user_id, "company_id": user.company_id}, {"_id": 0})
     if not target:
         raise HTTPException(status_code=404, detail="Team member not found")
-    if target["role"] != "hr":
-        raise HTTPException(status_code=400, detail="Only HR members can be removed here")
+    if target["role"] not in {"hr", "manager"}:
+        raise HTTPException(status_code=400, detail="Only HR or manager members can be removed here")
     await db.users.delete_one({"id": user_id, "company_id": user.company_id})
 
 

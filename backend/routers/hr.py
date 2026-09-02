@@ -7,7 +7,7 @@ from lib.db import db
 from lib.mailer import action_resolved_email_html, send_email
 from lib.mcp_tools import execute_action_tool, validate_tool_args
 from lib.rate_limit import check_rate_limit
-from lib.security import CurrentUser, require_hr_or_admin
+from lib.security import CurrentUser, require_approver
 from models.schemas import ActionRequestPublic, ActionRequestResolution, utcnow
 from routers.company import _aware
 
@@ -50,12 +50,37 @@ def _action_request(doc: dict[str, Any]) -> ActionRequestPublic:
     )
 
 
+def _queue_query(user: CurrentUser) -> dict[str, Any]:
+    """Which requests each approver sees: managers → their reports' manager stage; HR → the
+    HR stage; company_admin → every stage (superset)."""
+    q: dict[str, Any] = {"company_id": user.company_id}
+    if user.role == "manager":
+        q["stage"] = "manager"
+        q["manager_employee_code"] = user.employee_code
+    elif user.role == "hr":
+        q["stage"] = "hr"
+    return q
+
+
+def _authorize(user: CurrentUser, doc: dict[str, Any]) -> None:
+    stage = doc.get("stage", "hr")
+    if user.role == "company_admin":
+        return
+    if stage == "manager":
+        if user.role == "manager" and doc.get("manager_employee_code") == user.employee_code:
+            return
+        raise HTTPException(status_code=403, detail="This request is awaiting the employee's manager")
+    if user.role == "hr":
+        return
+    raise HTTPException(status_code=403, detail="This request is awaiting HR approval")
+
+
 @router.get("/action-requests", response_model=list[ActionRequestPublic])
 async def list_action_requests(
     status: Optional[str] = "pending",
-    user: CurrentUser = Depends(require_hr_or_admin),
+    user: CurrentUser = Depends(require_approver),
 ) -> list[ActionRequestPublic]:
-    query: dict[str, Any] = {"company_id": user.company_id}
+    query = _queue_query(user)
     if status and status != "all":
         if status not in {"pending", "approved", "rejected"}:
             raise HTTPException(status_code=422, detail="Invalid action request status")
@@ -70,7 +95,7 @@ async def approve_action_request(
     request_id: str,
     payload: ActionRequestResolution,
     request: Request,
-    user: CurrentUser = Depends(require_hr_or_admin),
+    user: CurrentUser = Depends(require_approver),
 ) -> ActionRequestPublic:
     await check_rate_limit(request, "hr-approve", limit=30, window_seconds=60)
     doc = await db.action_requests.find_one(
@@ -80,6 +105,31 @@ async def approve_action_request(
         raise HTTPException(status_code=404, detail="Action request not found")
     if doc["status"] != "pending":
         raise HTTPException(status_code=409, detail="Action request is already resolved")
+    _authorize(user, doc)
+
+    # Step 1 of 2: manager approval only forwards the request to the HR queue — it does not
+    # execute the tool and the employee is not yet notified of a final decision.
+    if doc.get("stage", "hr") == "manager":
+        updates = {"stage": "hr"}
+        await db.action_requests.update_one(
+            {"id": request_id, "company_id": user.company_id, "status": "pending"},
+            {"$set": updates},
+        )
+        await db.runs.update_one(
+            {"id": doc["run_id"], "company_id": user.company_id},
+            {
+                "$push": {
+                    "trace": {
+                        "name": "manager_approval",
+                        "status": "approved",
+                        "summary": f"Manager {user.email} approved; forwarded to HR for final approval.",
+                        "output": {"action_request_id": request_id, "resolved_by": user.email},
+                        "latency_ms": 0,
+                    }
+                }
+            },
+        )
+        return _action_request({**doc, **updates})
 
     tool = await db.mcp_tools.find_one(
         {"company_id": user.company_id, "name": doc["tool_name"], "kind": "action"},
@@ -133,7 +183,7 @@ async def reject_action_request(
     request_id: str,
     payload: ActionRequestResolution,
     request: Request,
-    user: CurrentUser = Depends(require_hr_or_admin),
+    user: CurrentUser = Depends(require_approver),
 ) -> ActionRequestPublic:
     if request is not None:
         await check_rate_limit(request, "hr-reject", limit=30, window_seconds=60)
@@ -144,7 +194,9 @@ async def reject_action_request(
         raise HTTPException(status_code=404, detail="Action request not found")
     if doc["status"] != "pending":
         raise HTTPException(status_code=409, detail="Action request is already resolved")
+    _authorize(user, doc)
 
+    stage = doc.get("stage", "hr")
     resolved_at = utcnow()
     updates = {
         "status": "rejected",
@@ -162,9 +214,9 @@ async def reject_action_request(
         {
             "$push": {
                 "trace": {
-                    "name": "hr_approval",
+                    "name": "manager_approval" if stage == "manager" else "hr_approval",
                     "status": "rejected",
-                    "summary": f"HR rejected {doc['tool_name']}.",
+                    "summary": f"{'Manager' if stage == 'manager' else 'HR'} rejected {doc['tool_name']}.",
                     "output": {
                         "action_request_id": request_id,
                         "resolved_by": user.email,

@@ -41,6 +41,7 @@ interface FormState {
   joining_date: string;
   employment_status: string;
   employment_type: EmploymentType;
+  manager_employee_code: string;
 }
 
 const BLANK: FormState = {
@@ -50,6 +51,7 @@ const BLANK: FormState = {
   joining_date: "",
   employment_status: "active",
   employment_type: "full_time",
+  manager_employee_code: "",
 };
 
 export default function CompanyEmployees({ me }: { me: Me }) {
@@ -86,6 +88,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
       joining_date: emp.joining_date.slice(0, 10),
       employment_status: emp.employment_status,
       employment_type: emp.employment_type,
+      manager_employee_code: emp.manager_employee_code ?? "",
     });
     setFormOpen(true);
   };
@@ -99,6 +102,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
           joining_date: form.joining_date,
           employment_status: form.employment_status,
           employment_type: form.employment_type,
+          manager_employee_code: form.manager_employee_code.trim() === "" ? null : form.manager_employee_code.trim(),
         });
       }
       return apiPost<Employee>("/company/employees", {
@@ -108,6 +112,7 @@ export default function CompanyEmployees({ me }: { me: Me }) {
         joining_date: form.joining_date,
         employment_status: form.employment_status,
         employment_type: form.employment_type,
+        manager_employee_code: form.manager_employee_code.trim() === "" ? null : form.manager_employee_code.trim(),
       });
     },
     onSuccess: () => {
@@ -361,6 +366,20 @@ export default function CompanyEmployees({ me }: { me: Me }) {
                   </SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manager-code">Manager employee code (optional)</Label>
+              <Input
+                id="manager-code"
+                value={form.manager_employee_code}
+                onChange={(e) => setForm({ ...form, manager_employee_code: e.target.value })}
+                placeholder="e.g. EMP-0007"
+                data-testid="employee-manager-input"
+              />
+              <p className="text-[11px] text-zinc-500">
+                If set and that manager has a login, this employee's action requests route to
+                the manager for approval before HR.
+              </p>
             </div>
             <DialogFooter>
               <Button type="submit" disabled={save.isPending} data-testid="employee-submit-button">

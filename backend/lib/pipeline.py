@@ -795,6 +795,14 @@ async def run_pipeline(
                 emp = await db.employees.find_one(
                     {"company_id": company_id, "employee_code": employee_id}, {"_id": 0}
                 )
+                mgr_code = (emp or {}).get("manager_employee_code")
+                manager_user = None
+                if mgr_code:
+                    manager_user = await db.users.find_one(
+                        {"company_id": company_id, "role": "manager", "employee_code": mgr_code},
+                        {"_id": 0},
+                    )
+                route_stage = "manager" if manager_user else "hr"
                 action_request_id = new_id()
                 await db.action_requests.insert_one(
                     {
@@ -807,6 +815,8 @@ async def run_pipeline(
                         "tool_call_args": tool_call_args,
                         "run_id": run_id or "",
                         "status": "pending",
+                        "stage": route_stage,
+                        "manager_employee_code": mgr_code if manager_user else None,
                         "requested_at": utcnow(),
                         "resolved_at": None,
                         "resolved_by": None,

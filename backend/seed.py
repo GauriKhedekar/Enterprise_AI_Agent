@@ -31,6 +31,8 @@ DEMO = {
     "employee_password": "employee123",
     "hannah_email": "hannah.weber@acmerobotics.com",
     "hannah_password": "hannah123",
+    "manager_email": "marcus.lee@acmerobotics.com",
+    "manager_password": "manager123",
 }
 
 OTHER = {
@@ -40,14 +42,17 @@ OTHER = {
 }
 
 EMPLOYEES = [
-    ("EMP-0001", "Priya Sharma", DEMO["employee_email"], "Engineering", 26, "active", "full_time"),
-    ("EMP-0002", "Daniel Okafor", "daniel.okafor@acmerobotics.com", "Engineering", 14, "active", "full_time"),
-    ("EMP-0003", "Mei Tanaka", "mei.tanaka@acmerobotics.com", "Finance", 8, "active", "full_time"),
-    ("EMP-0004", "Luis Ferreira", "luis.ferreira@acmerobotics.com", "Customer Success", 4, "probation", "full_time"),
-    ("EMP-0005", "Hannah Weber", "hannah.weber@acmerobotics.com", "People Ops", 2, "active", "full_time"),
+    # (code, name, email, dept, months, status, employment_type, manager_employee_code)
+    ("EMP-0001", "Priya Sharma", DEMO["employee_email"], "Engineering", 26, "active", "full_time", "EMP-0007"),
+    ("EMP-0002", "Daniel Okafor", "daniel.okafor@acmerobotics.com", "Engineering", 14, "active", "full_time", "EMP-0007"),
+    ("EMP-0003", "Mei Tanaka", "mei.tanaka@acmerobotics.com", "Finance", 8, "active", "full_time", None),
+    ("EMP-0004", "Luis Ferreira", "luis.ferreira@acmerobotics.com", "Customer Success", 4, "probation", "full_time", None),
+    ("EMP-0005", "Hannah Weber", "hannah.weber@acmerobotics.com", "People Ops", 2, "active", "full_time", None),
     # Long tenure (passes the 6-month rule) but a contract worker, not full-time — a useful
     # demo case for the WFH policy's "full-time employees" eligibility condition.
-    ("EMP-0006", "Sofia Rossi", "sofia.rossi@acmerobotics.com", "Design", 30, "active", "contract"),
+    ("EMP-0006", "Sofia Rossi", "sofia.rossi@acmerobotics.com", "Design", 30, "active", "contract", None),
+    # Engineering manager — has a login (role=manager) and is the approver for EMP-0001/0002.
+    ("EMP-0007", "Marcus Lee", DEMO["manager_email"], "Engineering", 48, "active", "full_time", None),
 ]
 
 def _cred(env_name: str) -> str:
@@ -228,8 +233,9 @@ async def main() -> None:
     await upsert_user(acme, DEMO["hr_email"], "hr", DEMO["hr_password"])
     await upsert_user(acme, DEMO["employee_email"], "employee", DEMO["employee_password"], "EMP-0001")
     await upsert_user(acme, DEMO["hannah_email"], "employee", DEMO["hannah_password"], "EMP-0005")
+    await upsert_user(acme, DEMO["manager_email"], "manager", DEMO["manager_password"], "EMP-0007")
 
-    for code, name, email, dept, months, status, emp_type in EMPLOYEES:
+    for code, name, email, dept, months, status, emp_type, manager_code in EMPLOYEES:
         joining = months_ago(months)
         payload = {
             "company_id": acme,
@@ -241,6 +247,7 @@ async def main() -> None:
             "service_months": months,
             "employment_status": status,
             "employment_type": emp_type,
+            "manager_employee_code": manager_code,
         }
         existing = await db.employees.find_one({"company_id": acme, "employee_code": code}, {"_id": 0})
         if existing:

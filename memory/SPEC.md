@@ -61,12 +61,21 @@ lookups by id, so guessing another tenant's UUID returns 404.
 `/company/team` (admin: invite/revoke HR), `/company/policies`, `/company/runs`,
 `/company/api-keys`, `/hr/approvals`, `/employee/home`, `/employee/history`.
 
-## HR user provisioning & notifications
-- Company admins create HR logins from the **Team & HR** page (`/company/team`): invite by
-  email → the invitee sets a password via the existing `/invite/:token` accept flow → logs
-  in with role `hr` and can approve/reject at `/hr/approvals`. HR users have no employee_code.
-- HR approve/reject sends the requesting employee an email (`lib/mailer.action_resolved_email_html`),
-  degrading to log-only when `RESEND_API_KEY` is unset. HR invites use `hr_invite_email_html`.
+## HR / manager provisioning & two-step approval
+- Company admins add logins from the **Team & HR** page (`/company/team`): invite by email
+  with a role of **HR** or **Manager** → the invitee sets a password via `/invite/:token` →
+  logs in. HR reviewers see the whole queue; a **manager** invite is linked to their own
+  `employee_code`.
+- Employees carry an optional `manager_employee_code`. When a governed action is submitted,
+  the pipeline routes it to **stage `manager`** if that employee has a manager code *and* a
+  manager login exists for it; otherwise **stage `hr`**. Two-step flow: manager approve →
+  advances to stage `hr` (still pending, no execution, no employee email yet) → HR approve →
+  executes + notifies employee. A reject at either stage ends it and notifies the employee.
+  `company_admin` is a superset (sees/acts on every stage); managers only see their reports'
+  manager-stage queue; HR sees the hr-stage queue. All on `/hr/approvals` (role-aware title).
+- Emails via `lib/mailer` (`hr_invite_email_html` role-aware, `action_resolved_email_html`)
+  degrade to log-only unless `RESEND_API_KEY` is set. Roles: `company_admin`, `hr`,
+  `manager`, `employee`.
 
 ## Deployment (Render + Vercel + Atlas)
 Cross-origin: frontend `api.ts` reads build-time `VITE_API_BASE_URL` (falls back to the Vite

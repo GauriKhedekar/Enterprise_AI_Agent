@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 Provider = Literal["gemini", "qdrant", "pageindex"]
 Backend = Literal["qdrant", "pageindex"]
-Role = Literal["company_admin", "hr", "employee"]
+Role = Literal["company_admin", "hr", "employee", "manager"]
 McpToolKind = Literal["read", "action"]
 EmploymentType = Literal["full_time", "part_time", "contract"]
 
@@ -128,6 +128,8 @@ class ActionRequestPublic(BaseModel):
     tool_call_args: dict[str, Any] = Field(default_factory=dict)
     run_id: str
     status: ActionRequestStatus
+    stage: str = "hr"
+    manager_employee_code: Optional[str] = None
     requested_at: datetime
     resolved_at: Optional[datetime] = None
     resolved_by: Optional[str] = None
@@ -147,6 +149,7 @@ class EmployeeCreate(BaseModel):
     joining_date: date
     employment_status: str = Field(default="active", max_length=40)
     employment_type: EmploymentType = "full_time"
+    manager_employee_code: Optional[str] = Field(default=None, max_length=20)
 
 
 class EmployeeUpdate(BaseModel):
@@ -155,6 +158,7 @@ class EmployeeUpdate(BaseModel):
     joining_date: date
     employment_status: str = Field(max_length=40)
     employment_type: EmploymentType = "full_time"
+    manager_employee_code: Optional[str] = Field(default=None, max_length=20)
 
 
 class Employee(BaseModel):
@@ -168,6 +172,7 @@ class Employee(BaseModel):
     service_months: int
     employment_status: str
     employment_type: EmploymentType = "full_time"
+    manager_employee_code: Optional[str] = None
     has_login: bool = False
 
 
@@ -193,6 +198,8 @@ class TeamMember(BaseModel):
 
 class TeamInviteRequest(BaseModel):
     email: EmailStr
+    role: Literal["hr", "manager"] = "hr"
+    employee_code: Optional[str] = Field(default=None, max_length=20)
 
 
 # ---------- WFH weekly usage (employee meter) ----------

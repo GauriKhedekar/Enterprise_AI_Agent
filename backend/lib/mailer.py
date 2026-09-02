@@ -58,17 +58,22 @@ def invite_email_html(company_name: str, employee_code: str, invite_url: str) ->
 """
 
 
-def hr_invite_email_html(company_name: str, invite_url: str) -> str:
+def hr_invite_email_html(company_name: str, invite_url: str, role: str = "hr") -> str:
+    label = "a manager" if role == "manager" else "HR"
+    what = (
+        "review and approve or reject action requests from your direct reports"
+        if role == "manager"
+        else "review and approve or reject employee action requests"
+    )
     return f"""
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0d13;padding:32px 0;font-family:Arial,Helvetica,sans-serif">
   <tr><td align="center">
     <table width="520" cellpadding="0" cellspacing="0" style="background:#11141d;border:1px solid #1e2433;border-radius:12px;padding:32px">
       <tr><td style="color:#ffffff;font-size:20px;font-weight:600;padding-bottom:8px">
-        You have been invited to {company_name} as HR
+        You have been invited to {company_name} as {label}
       </td></tr>
       <tr><td style="color:#9ca3af;font-size:14px;line-height:22px;padding-bottom:20px">
-        You can review and approve or reject employee action requests in the Adaptive
-        Enterprise Agent. Set a password to activate your HR account.
+        You can {what} in the Adaptive Enterprise Agent. Set a password to activate your account.
       </td></tr>
       <tr><td style="padding-bottom:20px">
         <a href="{invite_url}" style="background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;display:inline-block">

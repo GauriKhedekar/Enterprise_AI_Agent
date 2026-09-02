@@ -53,8 +53,21 @@ clauses, reads the employee's HR record, decides, and shows its full reasoning t
   Only the **last 4 characters** are ever returned, to anyone, including the creator.
 - **Agent run log** — paginated, filterable by decision, every row expandable to the full
   stage-by-stage trace with raw JSON per stage.
+- **Team & HR access** — invite **HR reviewers** or **managers** by email from the Team page;
+  each sets a password via a single-use link. HR reviewers see the whole approval queue;
+  managers only see requests from their direct reports.
 - **Backend comparison** — run the same queries through Qdrant *and* PageIndex side by
   side and see where evidence and decisions diverge.
+
+**Approvals — two-step manager → HR**
+- Governed (state-changing) actions like a WFH request are never executed by the model —
+  they become an `action_requests` item awaiting human approval.
+- If the requesting employee has a `manager_employee_code` and a manager login exists, the
+  request routes to that **manager first**; on approval it moves to the **HR queue** for
+  final sign-off (manager reject ends it). No manager set → straight to HR. `company_admin`
+  can act at any stage.
+- Every resolution emails the employee; new pending items and invites use the mailer too.
+  Email sending is real once `RESEND_API_KEY` is set (otherwise it degrades to log-only).
 
 **For employees**
 - **Compliance assistant** — ask a question, watch the pipeline progress stage by stage,

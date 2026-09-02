@@ -47,6 +47,10 @@ const EMPLOYEE_NAV: NavItem[] = [
   { label: "My Requests", path: "/employee/history", icon: <Clock className="size-4" /> },
 ];
 
+const MANAGER_NAV: NavItem[] = [
+  { label: "Team Approvals", path: "/hr/approvals", icon: <CheckSquare className="size-4" /> },
+];
+
 interface AppShellProps {
   me: Me;
   title: string;
@@ -59,13 +63,22 @@ export default function AppShell({ me, title, subtitle, actions, children }: App
   const location = useLocation();
   const navigate = useNavigate();
   const endSession = useEndSession();
-  const nav = me.role === "company_admin" ? ADMIN_NAV : me.role === "hr" ? HR_NAV : EMPLOYEE_NAV;
+  const nav =
+    me.role === "company_admin"
+      ? ADMIN_NAV
+      : me.role === "hr"
+        ? HR_NAV
+        : me.role === "manager"
+          ? MANAGER_NAV
+          : EMPLOYEE_NAV;
   const roleLabel =
     me.role === "company_admin"
       ? "Company Admin"
       : me.role === "hr"
         ? "HR"
-        : `Employee - ${me.employee_code ?? "unknown"}`;
+        : me.role === "manager"
+          ? `Manager - ${me.employee_code ?? "unknown"}`
+          : `Employee - ${me.employee_code ?? "unknown"}`;
 
   const signOut = async () => {
     await endSession();
@@ -136,7 +149,7 @@ export default function AppShell({ me, title, subtitle, actions, children }: App
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-4 border-b border-[#1c2230] bg-[#0b0d13]/90 px-6 backdrop-blur-md">
           <div className="flex min-w-0 items-center gap-3">
             <span className="hidden font-mono text-[10px] uppercase tracking-widest text-zinc-500 sm:inline">
-              {me.role === "company_admin" ? "Admin" : me.role === "hr" ? "HR" : "Employee"}
+              {me.role === "company_admin" ? "Admin" : me.role === "hr" ? "HR" : me.role === "manager" ? "Manager" : "Employee"}
             </span>
             <span className="hidden text-zinc-700 sm:inline">/</span>
             <span className="truncate text-sm text-zinc-300">{title}</span>

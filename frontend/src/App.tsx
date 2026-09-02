@@ -59,7 +59,7 @@ export default function App() {
         />
         <Route
           path="/hr/approvals"
-          element={<RequireRole role={["company_admin", "hr"]}>{(me) => <HrApprovals me={me} />}</RequireRole>}
+          element={<RequireRole role={["company_admin", "hr", "manager"]}>{(me) => <HrApprovals me={me} />}</RequireRole>}
         />
 
         <Route

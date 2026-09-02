@@ -16,6 +16,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError, apiDelete, apiGet, apiPost } from "@/lib/api";
 import type { InviteResult, Me, TeamMember } from "@/lib/types";
 
@@ -30,6 +37,8 @@ export default function CompanyTeam({ me }: { me: Me }) {
   const qc = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [email, setEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"hr" | "manager">("hr");
+  const [managerCode, setManagerCode] = useState("");
   const [invite, setInvite] = useState<InviteResult | null>(null);
 
   const team = useQuery<TeamMember[]>({
@@ -41,15 +50,24 @@ export default function CompanyTeam({ me }: { me: Me }) {
   const invalidate = () => void qc.invalidateQueries({ queryKey: KEY });
 
   const sendInvite = useMutation({
-    mutationFn: () => apiPost<InviteResult>("/company/team/invite", { email: email.trim() }),
+    mutationFn: () =>
+      apiPost<InviteResult>("/company/team/invite", {
+        email: email.trim(),
+        role: inviteRole,
+        employee_code: inviteRole === "manager" ? managerCode.trim() : null,
+      }),
     onSuccess: (result) => {
       setInvite(result);
       setInviteOpen(false);
       setEmail("");
-      toast.success(result.email_sent ? `HR invite emailed to ${result.email}` : "HR invite link generated");
+      setManagerCode("");
+      setInviteRole("hr");
+      toast.success(
+        result.email_sent ? `Invite emailed to ${result.email}` : "Invite link generated",
+      );
       invalidate();
     },
-    onError: (e) => toast.error(errText(e, "Could not send the HR invite")),
+    onError: (e) => toast.error(errText(e, "Could not send the invite")),
   });
 
   const revoke = useMutation({
@@ -114,7 +132,7 @@ export default function CompanyTeam({ me }: { me: Me }) {
                           : "border-[#2c3348] bg-[#94a3b81a] text-[#cbd5e1]")
                       }
                     >
-                      {member.role === "company_admin" ? "Company Admin" : "HR"}
+                      {member.role === "company_admin" ? "Company Admin" : member.role === "manager" ? "Manager" : "HR"}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
@@ -131,7 +149,7 @@ export default function CompanyTeam({ me }: { me: Me }) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end">
-                      {member.role === "hr" ? (
+                      {member.role === "hr" || member.role === "manager" ? (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -157,10 +175,10 @@ export default function CompanyTeam({ me }: { me: Me }) {
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent data-testid="invite-hr-dialog">
           <DialogHeader>
-            <DialogTitle>Invite an HR reviewer</DialogTitle>
+            <DialogTitle>Invite a reviewer</DialogTitle>
             <DialogDescription>
-              They receive a single-use link to set a password and gain access to the HR
-              Approvals queue.
+              They receive a single-use link to set a password. HR reviewers see the whole
+              approval queue; managers only see requests from their direct reports.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -171,6 +189,18 @@ export default function CompanyTeam({ me }: { me: Me }) {
             }}
           >
             <div className="space-y-2">
+              <Label htmlFor="invite-role">Role</Label>
+              <Select value={inviteRole} onValueChange={(v: string) => setInviteRole(v as "hr" | "manager")}>
+                <SelectTrigger id="invite-role" data-testid="invite-role-select">
+                  <SelectValue>{(v) => (v === "manager" ? "Manager" : "HR reviewer")}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hr" data-testid="invite-role-option-hr">HR reviewer</SelectItem>
+                  <SelectItem value="manager" data-testid="invite-role-option-manager">Manager</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="hr-email">Work email</Label>
               <Input
                 id="hr-email"
@@ -178,10 +208,27 @@ export default function CompanyTeam({ me }: { me: Me }) {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="hr@yourcompany.com"
+                placeholder="reviewer@yourcompany.com"
                 data-testid="invite-hr-email-input"
               />
             </div>
+            {inviteRole === "manager" ? (
+              <div className="space-y-2">
+                <Label htmlFor="manager-employee-code">Manager's employee code</Label>
+                <Input
+                  id="manager-employee-code"
+                  required
+                  value={managerCode}
+                  onChange={(e) => setManagerCode(e.target.value)}
+                  placeholder="e.g. EMP-0007"
+                  data-testid="invite-manager-code-input"
+                />
+                <p className="text-[11px] text-zinc-500">
+                  Employees whose "manager employee code" matches this will route to this
+                  manager first.
+                </p>
+              </div>
+            ) : null}
             <DialogFooter>
               <Button type="submit" disabled={sendInvite.isPending} data-testid="invite-hr-submit-button">
                 {sendInvite.isPending ? "Sending…" : "Send invite"}
