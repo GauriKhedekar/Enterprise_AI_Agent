@@ -14,7 +14,7 @@ clauses, reads the employee's HR record, decides, and shows its full reasoning t
 > This is a development preview. The app is built to run **fully independently of this
 > preview** on free-tier infrastructure — backend on Render, frontend on Vercel, database
 > on MongoDB Atlas. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the turnkey steps and
-> replace this link with your own Vercel URL once deployed.
+> replace this link with your own Vercel URL once deployed, if you want to deploy your own Enterprise AI Agent.
 
 ---
 
